@@ -1,0 +1,92 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>{% block title %}Radar Management System{% endblock %}</title>
+	
+	<!-- Django Admin CSS -->
+	<link rel="stylesheet" href="{% static 'admin/css/base.css' %}">
+	<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+	<link rel="stylesheet" href="{% static 'admin/css/widgets.css' %}">
+	
+	<!-- MapLibre GL CSS (single include) -->
+	<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+	
+	<!-- Custom CSS -->
+	<link rel="stylesheet" href="{% static 'frontend/css/base.css' %}">
+	
+	{% block extra_css %}{% endblock %}
+</head>
+<body class="{% block bodyclass %}{% endblock %}">
+	<div id="header">
+		<div id="branding">
+			<h1 id="site-name"><a href="{% url 'frontend:radar_list' %}">Radar Management System</a></h1>
+		</div>
+		{% if user.is_authenticated %}
+		<div id="user-tools">
+			Welcome, <strong>{{ user.username }}</strong>. 
+			<a href="{% url 'frontend:logout' %}">Log out</a>
+		</div>
+		{% endif %}
+	</div>
+	
+	<div class="main" id="main">
+		{% if messages %}
+		<ul class="messages">
+			{% for message in messages %}
+			<div class="alert alert-{{ message.tags }}">{{ message }}</div>
+			{% endfor %}
+		</ul>
+		{% endif %}
+		
+		<div class="content">
+			{% block content %}{% endblock %}
+		</div>
+	</div>
+	
+	<!-- MapLibre GL JS (single include) -->
+	<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+	
+	<!-- Mapbox GL Draw (compatible build) -->
+	<link rel="stylesheet" href="https://unpkg.com/@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css" />
+	<script src="https://unpkg.com/@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.js"></script>
+
+	<script>
+		// Prepare patched Draw styles but do not instantiate a draw object here.
+		// Page templates (e.g. radar_form.html) should create the Draw instance when their map is ready:
+		// const draw = new window.RADAR_MAPLIBRE.Draw({ styles: window.RADAR_MAPLIBRE.patchedDrawStyles, ... });
+		(function () {
+			if (typeof window.maplibregl === 'undefined') {
+				console.error('maplibre-gl is not loaded. Map styles may not render.');
+				return;
+			}
+			const Draw = window.MapboxDraw;
+			const patchedDrawStyles = (Draw && Draw.styles)
+				? Draw.styles.map(s => {
+					if (s && s.paint && s.paint['line-dasharray']) {
+						const dash = s.paint['line-dasharray'];
+						if (Array.isArray(dash) && dash.length && typeof dash[0] === 'number') {
+							return {
+								...s,
+								paint: {
+									...s.paint,
+									'line-dasharray': ['literal', dash]
+								}
+							};
+						}
+					}
+					return s;
+				})
+				: undefined;
+
+			window.RADAR_MAPLIBRE = window.RADAR_MAPLIBRE || {};
+			window.RADAR_MAPLIBRE.Draw = Draw;
+			window.RADAR_MAPLIBRE.patchedDrawStyles = patchedDrawStyles;
+		})();
+	</script>
+
+	{% block extra_js %}{% endblock %}
+</body>
+</html>

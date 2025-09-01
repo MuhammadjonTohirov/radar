@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(/Users/r/.claude/**)",
+      "Read(/Users/r/**)",
+      "Bash(tree:*)",
+      "Bash(python:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(django-admin startproject:*)",
+      "Bash(docker compose:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1,0 +1,152 @@
+{% extends "frontend/base.html" %}
+{% load static %}
+
+{% block title %}Radar List - Radar Management System{% endblock %}
+
+{% block content %}
+<div class="radar-management">
+    <h1>Radar Management</h1>
+    
+    <div class="radar-actions">
+        <a href="{% url 'frontend:radar_add' %}" class="btn btn-primary">
+            <i class="icon-add"></i> Add New Radar
+        </a>
+        
+        <div class="search-filters" style="float: right;">
+            <form method="get" style="display: inline-block;">
+                <input type="text" name="search" placeholder="Search radars..." value="{{ request.GET.search }}" style="padding: 8px;">
+                <select name="type" style="padding: 8px;">
+                    <option value="">All Types</option>
+                    {% for type_key, type_label in radar_types %}
+                    <option value="{{ type_key }}" {% if request.GET.type == type_key %}selected{% endif %}>
+                        {{ type_label }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <select name="verified" style="padding: 8px;">
+                    <option value="">All Status</option>
+                    <option value="true" {% if request.GET.verified == 'true' %}selected{% endif %}>Verified</option>
+                    <option value="false" {% if request.GET.verified == 'false' %}selected{% endif %}>Unverified</option>
+                </select>
+                <button type="submit" class="btn btn-secondary">Filter</button>
+            </form>
+        </div>
+        <div style="clear: both;"></div>
+    </div>
+    
+    <div class="results">
+        <p class="paginator">
+            {{ radars|length }} radar{{ radars|pluralize }} found
+            {% if radars.has_other_pages %}
+            (page {{ radars.number }} of {{ radars.paginator.num_pages }})
+            {% endif %}
+        </p>
+        
+        <table class="radar-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Type</th>
+                    <th>Location</th>
+                    <th>Speed Limit</th>
+                    <th>Direction</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for radar in radars %}
+                <tr>
+                    <td>{{ radar.id }}</td>
+                    <td>
+                        <span class="radar-type-badge radar-type-{{ radar.type }}">
+                            {{ radar.get_type_display }}
+                        </span>
+                    </td>
+                    <td>{{ radar.coordinates_display }}</td>
+                    <td>
+                        {% if radar.speed_limit %}
+                            {{ radar.speed_limit }} km/h
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>{{ radar.get_direction_display }}</td>
+                    <td>
+                        {% if radar.verified %}
+                            <span class="status-verified">✓ Verified</span>
+                        {% else %}
+                            <span class="status-unverified">⚠ Unverified</span>
+                        {% endif %}
+                        {% if not radar.active %}
+                            <br><small>(Inactive)</small>
+                        {% endif %}
+                    </td>
+                    <td>{{ radar.created_at|date:"M d, Y" }}</td>
+                    <td>
+                        <a href="{% url 'frontend:radar_edit' radar.id %}" class="btn btn-secondary" style="font-size: 12px; padding: 4px 8px;">Edit</a>
+                        <a href="{% url 'frontend:radar_delete' radar.id %}" class="btn btn-danger" style="font-size: 12px; padding: 4px 8px;" 
+                           onclick="return confirm('Are you sure you want to delete this radar?')">Delete</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" style="text-align: center; padding: 40px;">
+                        <p>No radars found.</p>
+                        <a href="{% url 'frontend:radar_add' %}" class="btn btn-primary">Add your first radar</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    {% if radars.has_other_pages %}
+    <div class="pagination">
+        <span class="step-links">
+            {% if radars.has_previous %}
+                <a href="?page=1{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.verified %}&verified={{ request.GET.verified }}{% endif %}">&laquo; first</a>
+                <a href="?page={{ radars.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.verified %}&verified={{ request.GET.verified }}{% endif %}">previous</a>
+            {% endif %}
+
+            <span class="current">
+                Page {{ radars.number }} of {{ radars.paginator.num_pages }}
+            </span>
+
+            {% if radars.has_next %}
+                <a href="?page={{ radars.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.verified %}&verified={{ request.GET.verified }}{% endif %}">next</a>
+                <a href="?page={{ radars.paginator.num_pages }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.verified %}&verified={{ request.GET.verified }}{% endif %}">last &raquo;</a>
+            {% endif %}
+        </span>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.radar-management { padding: 20px; }
+.radar-table { border-collapse: collapse; margin: 20px 0; }
+.radar-table th, .radar-table td { 
+    padding: 12px; 
+    text-align: left; 
+    border-bottom: 1px solid #ddd; 
+}
+.radar-table th { 
+    background: #f8f9fa; 
+    font-weight: bold;
+    border-bottom: 2px solid #dee2e6;
+}
+.radar-table tbody tr:hover { background: #f8f9fa; }
+.pagination { margin: 20px 0; text-align: center; }
+.pagination a, .pagination .current { 
+    padding: 8px 12px; 
+    margin: 0 4px; 
+    text-decoration: none; 
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+.pagination a { background: white; color: #007cba; }
+.pagination a:hover { background: #f0f0f0; }
+.pagination .current { background: #007cba; color: white; border-color: #007cba; }
+</style>
+{% endblock %}

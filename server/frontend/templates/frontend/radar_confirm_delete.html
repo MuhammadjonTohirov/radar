@@ -1,0 +1,78 @@
+{% extends "frontend/base.html" %}
+
+{% block title %}Delete Radar #{{ radar.id }} - Radar Management System{% endblock %}
+
+{% block content %}
+<div class="delete-confirmation">
+    <h1>Delete Radar #{{ radar.id }}</h1>
+    
+    <div class="alert alert-error">
+        <strong>Warning:</strong> You are about to delete this radar. This action cannot be undone.
+    </div>
+    
+    <div class="radar-details" style="background: #f8f9fa; padding: 20px; border-radius: 4px; margin: 20px 0;">
+        <h3>Radar Details</h3>
+        <table>
+            <tr>
+                <td><strong>ID:</strong></td>
+                <td>{{ radar.id }}</td>
+            </tr>
+            <tr>
+                <td><strong>Type:</strong></td>
+                <td>{{ radar.get_type_display }}</td>
+            </tr>
+            <tr>
+                <td><strong>Location:</strong></td>
+                <td>{{ radar.coordinates_display }}</td>
+            </tr>
+            <tr>
+                <td><strong>Speed Limit:</strong></td>
+                <td>
+                    {% if radar.speed_limit %}
+                        {{ radar.speed_limit }} km/h
+                    {% else %}
+                        Not specified
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td><strong>Direction:</strong></td>
+                <td>{{ radar.get_direction_display }}</td>
+            </tr>
+            <tr>
+                <td><strong>Status:</strong></td>
+                <td>
+                    {% if radar.verified %}
+                        <span class="status-verified">✓ Verified</span>
+                    {% else %}
+                        <span class="status-unverified">⚠ Unverified</span>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td><strong>Created:</strong></td>
+                <td>{{ radar.created_at|date:"M d, Y H:i" }}</td>
+            </tr>
+            {% if radar.notes %}
+            <tr>
+                <td><strong>Notes:</strong></td>
+                <td>{{ radar.notes }}</td>
+            </tr>
+            {% endif %}
+        </table>
+    </div>
+    
+    <form method="post" style="display: inline;">
+        {% csrf_token %}
+        <input type="submit" value="Yes, Delete Radar" class="btn btn-danger">
+        <a href="{% url 'frontend:radar_list' %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+
+<style>
+.delete-confirmation { padding: 20px; max-width: 600px; }
+.radar-details table { width: 100%; }
+.radar-details td { padding: 8px; border-bottom: 1px solid #eee; }
+.radar-details td:first-child { font-weight: bold; width: 150px; }
+</style>
+{% endblock %}

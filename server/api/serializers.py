@@ -1,0 +1,160 @@
+from rest_framework import serializers
+from django.conf import settings
+from radars.models import Radar, RadarReport, DetectionLog
+
+# Import GIS serializer only if available
+if getattr(settings, 'HAS_GIS', False):
+    try:
+        from rest_framework_gis.serializers import GeoFeatureModelSerializer
+        BaseRadarSerializer = GeoFeatureModelSerializer
+        HAS_GIS_SERIALIZER = True
+    except ImportError:
+        BaseRadarSerializer = serializers.ModelSerializer
+        HAS_GIS_SERIALIZER = False
+else:
+    BaseRadarSerializer = serializers.ModelSerializer
+    HAS_GIS_SERIALIZER = False
+
+
+class RadarSerializer(BaseRadarSerializer):
+    """
+    Radar serializer with optional GeoJSON support
+    """
+    coordinates_display = serializers.ReadOnlyField()
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+    verified_by_username = serializers.CharField(source='verified_by.username', read_only=True)
+    
+    class Meta:
+        model = Radar
+        fields = [
+            'id', 'type', 'speed_limit', 'direction', 'notes', 
+            'verified', 'active', 'alert_count', 'last_detected',
+            'created_at', 'updated_at', 'verified_at',
+            'coordinates_display', 'created_by_username', 'verified_by_username'
+        ]
+        read_only_fields = [
+            'alert_count', 'last_detected', 'created_at', 'updated_at', 
+            'verified_at', 'coordinates_display', 'created_by_username',
+            'verified_by_username'
+        ]
+        
+        # Add geo_field only for GIS serializer
+        if HAS_GIS_SERIALIZER:
+            geo_field = 'center'
+    
+    def to_representation(self, instance):
+        """Add sector polygon to the representation"""
+        representation = super().to_representation(instance)
+        
+        # Add sector polygon as additional property
+        if HAS_GIS_SERIALIZER and hasattr(instance, 'sector') and instance.sector:
+            representation['properties']['sector'] = {
+                'type': 'Polygon',
+                'coordinates': list(instance.sector.coords)
+            }
+        elif not HAS_GIS_SERIALIZER and hasattr(instance, 'sector_json') and instance.sector_json:
+            representation['sector'] = instance.sector_json
+            representation['center'] = {
+                'latitude': getattr(instance, 'center_lat', None),
+                'longitude': getattr(instance, 'center_lon', None)
+            }
+        
+        return representation
+
+
+class RadarListSerializer(serializers.ModelSerializer):
+    """
+    Simplified serializer for listing radars without geometry
+    """
+    coordinates_display = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = Radar
+        fields = [
+            'id', 'type', 'speed_limit', 'direction', 'verified', 
+            'active', 'alert_count', 'coordinates_display', 'created_at'
+        ]
+
+
+class RadarReportSerializer(serializers.ModelSerializer):
+    """
+    Serializer for radar reports
+    """
+    radar_info = RadarListSerializer(source='radar', read_only=True)
+    
+    class Meta:
+        model = RadarReport
+        fields = [
+            'id', 'radar', 'radar_info', 'reporter_device', 'location',
+            'report_type', 'notes', 'created_at'
+        ]
+        read_only_fields = ['created_at']
+    
+    def validate_reporter_device(self, value):
+        """Ensure reporter device ID is provided"""
+        if not value or len(value.strip()) < 3:
+            raise serializers.ValidationError("Valid device ID is required")
+        return value.strip()
+
+
+class DetectionLogSerializer(serializers.ModelSerializer):
+    """
+    Serializer for detection logs (analytics)
+    """
+    radar_info = RadarListSerializer(source='radar', read_only=True)
+    
+    class Meta:
+        model = DetectionLog
+        fields = [
+            'id', 'radar', 'radar_info', 'device_id', 'detected_at',
+            'speed', 'location'
+        ]
+        read_only_fields = ['detected_at']
+
+
+class RadarCreateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating radars with polygon validation
+    """
+    
+    class Meta:
+        model = Radar
+        fields = [
+            'type', 'sector', 'speed_limit', 'direction', 'notes'
+        ]
+    
+    def validate_sector(self, value):
+        """Validate polygon geometry"""
+        if not value:
+            raise serializers.ValidationError("Sector polygon is required")
+        
+        if not value.valid:
+            raise serializers.ValidationError("Invalid polygon geometry")
+        
+        # Check minimum area (prevent tiny polygons)
+        if value.area < 0.000001:  # Very small area check
+            raise serializers.ValidationError("Polygon area is too small")
+        
+        return value
+    
+    def validate_speed_limit(self, value):
+        """Validate speed limit range"""
+        if value is not None:
+            if value < 10 or value > 200:
+                raise serializers.ValidationError(
+                    "Speed limit must be between 10 and 200 km/h"
+                )
+        return value
+
+
+class RadarStatsSerializer(serializers.Serializer):
+    """
+    Serializer for radar statistics
+    """
+    total_radars = serializers.IntegerField()
+    verified_radars = serializers.IntegerField()
+    active_radars = serializers.IntegerField()
+    total_detections = serializers.IntegerField()
+    radars_by_type = serializers.DictField()
+    recent_detections = serializers.IntegerField()
+    top_radars = RadarListSerializer(many=True)
