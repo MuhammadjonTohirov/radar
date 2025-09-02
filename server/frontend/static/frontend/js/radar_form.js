@@ -2,6 +2,7 @@
 let map;
 let draw;
 let currentPolygon = null;
+let radarMarker = null;
 
 // Initialize map
 function initMap() {
@@ -16,7 +17,7 @@ function initMap() {
         container: 'map',
         style: STYLE_URL,
         center: [71.7761, 40.3836], // Fergana, Uzbekistan (lon, lat)
-        zoom: 16
+        zoom: 12
     });
 
     // Wait until the style is loaded before instantiating Draw and interacting with style sources
@@ -29,7 +30,7 @@ function initMap() {
         // and if the container had layout changes this ensures the correct zoom/center.
         try {
             // enforce the intended initial view
-            map.jumpTo({ center: [71.7761, 40.3836], zoom: 16 });
+            map.jumpTo({ center: [71.7761, 40.3836], zoom: 12 });
             map.resize();
         } catch (err) {
             // Non-fatal — keep original behavior but log for debugging
@@ -39,73 +40,77 @@ function initMap() {
             console.error('Map error event:', err);
         });
 
-        // Location picker control: a simple button that toggles map click-to-place-marker mode
-        const pickBtn = document.createElement('button');
-        pickBtn.className = 'map-control-btn';
-        pickBtn.id = 'pick-location-btn';
-        pickBtn.textContent = 'Pick location';
-        pickBtn.title = 'Click to pick radar location on the map';
-        let pickerActive = false;
-        let pickedMarker = null;
+        // Add radar location pin control
+        const pinControl = document.createElement('div');
+        pinControl.className = 'radar-pin-control';
+        pinControl.title = 'Click to place radar location';
+        let pinModeActive = false;
 
-        pickBtn.addEventListener('click', () => {
-            pickerActive = !pickerActive;
-            pickBtn.classList.toggle('active', pickerActive);
-            pickBtn.textContent = pickerActive ? 'Picking... (click map)' : 'Pick location';
+        pinControl.addEventListener('click', () => {
+            pinModeActive = !pinModeActive;
+            pinControl.classList.toggle('active', pinModeActive);
+            pinControl.title = pinModeActive ? 'Click on map to place radar' : 'Click to place radar location';
         });
 
-        // Add the button to the map container (absolute positioned)
+        // Add pin control to map container
         const mapContainer = document.getElementById('map');
-        if (mapContainer) mapContainer.appendChild(pickBtn);
+        if (mapContainer) mapContainer.appendChild(pinControl);
 
-        // When picker is active, clicking the map will place/update marker and fill center inputs
+        // Handle map clicks for radar location placement
         map.on('click', (e) => {
-            if (!pickerActive) return;
+            if (!pinModeActive) return;
+            
             const lng = e.lngLat.lng;
             const lat = e.lngLat.lat;
 
-            // remove existing marker
-            if (pickedMarker) {
-                pickedMarker.remove();
+            // Remove existing radar marker
+            if (radarMarker) {
+                radarMarker.remove();
             }
 
-            const el = document.createElement('div');
-            el.style.cssText = 'background: #007bff; width: 18px; height: 18px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.3);';
+            // Create radar marker element
+            const markerEl = document.createElement('div');
+            markerEl.style.cssText = `
+                background: #dc3545;
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                border: 3px solid white;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                cursor: pointer;
+            `;
 
-            pickedMarker = new maplibregl.Marker(el)
+            // Add radar marker to map
+            radarMarker = new maplibregl.Marker(markerEl)
                 .setLngLat([lng, lat])
+                .setPopup(new maplibregl.Popup().setHTML('<div><strong>Radar Location</strong></div>'))
                 .addTo(map);
 
-            // populate center input fields when not using GIS
+            // Update center coordinates in form fields
             if (typeof radarData !== 'undefined' && !radarData.hasGIS) {
-                document.getElementById(radarData.centerLatId).value = lat;
-                document.getElementById(radarData.centerLonId).value = lng;
+                document.getElementById(radarData.centerLatId).value = lat.toFixed(6);
+                document.getElementById(radarData.centerLonId).value = lng.toFixed(6);
             }
 
-            // Deactivate picker after placing marker
-            pickerActive = false;
-            pickBtn.classList.remove('active');
-            pickBtn.textContent = 'Pick location';
+            // Deactivate pin mode after placing marker
+            pinModeActive = false;
+            pinControl.classList.remove('active');
+            pinControl.title = 'Click to place radar location';
         });
 
-        // Choose Draw constructor: prefer patched export from base.html, fallback to global MapboxDraw
-        const DrawConstructor = (window.RADAR_MAPLIBRE && window.RADAR_MAPLIBRE.Draw) || window.MapboxDraw;
-        const patchedStyles = (window.RADAR_MAPLIBRE && window.RADAR_MAPLIBRE.patchedDrawStyles) || undefined;
-
-        if (!DrawConstructor) {
-            console.error('MapboxDraw constructor not available. Drawing controls will be disabled.');
+        // Initialize drawing controls
+        if (typeof MapboxDraw === 'undefined') {
+            console.error('MapboxDraw not loaded. Drawing controls will be disabled.');
             return;
         }
 
-        // Initialize drawing controls using patched styles when available
-        draw = new DrawConstructor({
+        draw = new MapboxDraw({
             displayControlsDefault: false,
             controls: {
                 polygon: true,
                 trash: true
             },
-            defaultMode: 'draw_polygon',
-            styles: patchedStyles
+            defaultMode: 'draw_polygon'
         });
 
         map.addControl(draw);
@@ -118,11 +123,12 @@ function initMap() {
         // Load existing polygon if editing (only after draw exists)
         if (typeof radarData !== 'undefined' && radarData.isEditing) {
             loadExistingPolygon();
+            loadExistingRadarLocation();
         }
     });
 }
 
-function updatePolygon(e) {
+function updatePolygon() {
     const data = draw.getAll();
     if (data.features.length > 0) {
         const polygon = data.features[0];
@@ -191,7 +197,44 @@ function loadExistingPolygon() {
         
         map.setCenter([centerLon, centerLat]);
         // Trigger UI update
-        updatePolygon({ features: [existingPolygon] });
+        updatePolygon();
+    }
+}
+
+function loadExistingRadarLocation() {
+    if (typeof radarData !== 'undefined' && radarData.isEditing && !radarData.hasGIS) {
+        const centerLatEl = document.getElementById(radarData.centerLatId);
+        const centerLonEl = document.getElementById(radarData.centerLonId);
+        
+        if (centerLatEl && centerLonEl && centerLatEl.value && centerLonEl.value) {
+            const lat = parseFloat(centerLatEl.value);
+            const lng = parseFloat(centerLonEl.value);
+            
+            if (!isNaN(lat) && !isNaN(lng)) {
+                // Remove existing marker
+                if (radarMarker) {
+                    radarMarker.remove();
+                }
+                
+                // Create radar marker element
+                const markerEl = document.createElement('div');
+                markerEl.style.cssText = `
+                    background: #dc3545;
+                    width: 12px;
+                    height: 12px;
+                    border-radius: 50%;
+                    border: 3px solid white;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                    cursor: pointer;
+                `;
+                
+                // Add radar marker to map
+                radarMarker = new maplibregl.Marker(markerEl)
+                    .setLngLat([lng, lat])
+                    .setPopup(new maplibregl.Popup().setHTML('<div><strong>Radar Location</strong></div>'))
+                    .addTo(map);
+            }
+        }
     }
 }
 
@@ -274,7 +317,7 @@ function displaySearchResults(results, resultsDiv) {
     resultsDiv.innerHTML = '';
     resultsDiv.style.display = 'block';
     
-    results.forEach((result, index) => {
+    results.forEach((result) => {
         const item = document.createElement('div');
         item.innerHTML = `
             <div style="font-weight: bold;">${result.display_name.split(',')[0]}</div>
