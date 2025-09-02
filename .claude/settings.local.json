@@ -8,7 +8,20 @@
       "Bash(source:*)",
       "Bash(pip install:*)",
       "Bash(django-admin startproject:*)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Read(/Users/muhammad/.docker/**)",
+      "Read(/Users/muhammad/.docker/**)",
+      "Bash(docker-compose up:*)",
+      "Bash(timeout 10s docker-compose up db redis -d)",
+      "Bash(docker-compose:*)",
+      "Bash(DATABASE_URL=postgresql://radar_user:radar_pass_dev@localhost:5432/radar_db python manage.py migrate)",
+      "Bash(DATABASE_URL=postgresql://radar_user:radar_pass_dev@localhost:5432/radar_db python3 manage.py migrate)",
+      "Bash(DATABASE_URL=postgresql://radar_user:radar_pass_dev@localhost:5432/radar_db python manage.py runserver)",
+      "Bash(docker run:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker rm:*)",
+      "Bash(lsof:*)",
+      "Bash(CUSTOM_ROUTING_URL=http://localhost:5002 DATABASE_URL=postgresql://radar_user:radar_pass_dev@localhost:5432/radar_db python3 -c \"\nimport os\nimport django\nos.environ.setdefault(''DJANGO_SETTINGS_MODULE'', ''radar_project.settings'')\ndjango.setup()\n\nfrom api.services.routing import RoutingService\n\nprint(''Testing custom routing integration...'')\ntry:\n    coordinates = [(71.76425536498604, 40.39236025345184), (71.79549773559057, 40.38268468389782)]\n    result = RoutingService.get_route_coords(coordinates)\n    print(f''Provider: {result[\"\"properties\"\"][\"\"summary\"\"][\"\"provider\"\"]}'')\n    print(f''Distance: {result[\"\"properties\"\"][\"\"summary\"\"][\"\"distance_m\"\"]}m'')\nexcept Exception as e:\n    print(f''Error: {e}'')\n    import traceback\n    traceback.print_exc()\n\")"
     ],
     "deny": [],
     "ask": []

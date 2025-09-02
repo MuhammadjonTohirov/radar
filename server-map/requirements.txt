@@ -1,0 +1,22 @@
+# Radar2 Map Routing Service Dependencies
+# Minimal dependencies for lightweight routing service
+
+flask==3.0.0
+flask-cors==4.0.0
+
+# Math and geometry calculations
+numpy==1.24.3
+
+# Optional: For enhanced mathematical functions
+scipy==1.11.3
+
+# Optional OSM graph-based routing (uses local PBF)
+pyrosm==0.6.2
+networkx==3.2.1
+shapely==2.0.3
+pandas==2.2.2
+
+# Development and testing
+pytest==7.4.3
+black==23.9.1
+flake8==6.1.0

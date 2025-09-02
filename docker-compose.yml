@@ -1,8 +1,8 @@
-version: '3.8'
+## docker compose v2 no longer requires a version key
 
 services:
   db:
-    image: postgis/postgis:15-3.3
+    image: postgres:15-alpine
     container_name: radar_db
     environment:
       POSTGRES_DB: radar_db
@@ -30,11 +30,17 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      osrm:
+        condition: service_healthy
     environment:
-      - DATABASE_URL=postgis://radar_user:radar_pass_dev@db:5432/radar_db
+      - DATABASE_URL=postgresql://radar_user:radar_pass_dev@db:5432/radar_db
       - DJANGO_SECRET_KEY=dev-secret-key-change-in-production
       - DEBUG=1
       - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
+      - ROUTING_PROVIDER=fallback
+      - ROUTING_BASE_URL=
+      - CUSTOM_ROUTING_URL=http://host.docker.internal:5002
+      - CUSTOM_ROUTING_ALGORITHM=osm
     volumes:
       - ./server:/app
       - static_files:/app/staticfiles
@@ -60,11 +66,56 @@ services:
       timeout: 10s
       retries: 3
 
+  osrm:
+    image: osrm/osrm-backend:latest
+    container_name: radar_osrm
+    networks:
+      - radar_network
+    volumes:
+      - osrm_data:/data
+    environment:
+      # Configure the region by setting OSRM_REGION (default: uzbekistan)
+      # Available regions: monaco, liechtenstein, andorra, malta, vatican, 
+      # Or country codes: us, uk, germany, france, spain, etc.
+      - OSRM_REGION=${OSRM_REGION:-uzbekistan}
+    command: >
+      sh -c "set -eux;
+        REGION=$${OSRM_REGION:-uzbekistan};
+        CURRENT=; if [ -f /data/region.txt ]; then CURRENT=$$(cat /data/region.txt); fi;
+        if [ ! -f /data/map.osrm ] || [ \"$$CURRENT\" != \"$$REGION\" ]; then
+          case $$REGION in
+            monaco) PBF_URL='https://download.geofabrik.de/europe/monaco-latest.osm.pbf' ;;
+            liechtenstein) PBF_URL='https://download.geofabrik.de/europe/liechtenstein-latest.osm.pbf' ;;
+            andorra) PBF_URL='https://download.geofabrik.de/europe/andorra-latest.osm.pbf' ;;
+            malta) PBF_URL='https://download.geofabrik.de/europe/malta-latest.osm.pbf' ;;
+            uzbekistan) PBF_URL='https://download.geofabrik.de/asia/uzbekistan-latest.osm.pbf' ;;
+            us) PBF_URL='https://download.geofabrik.de/north-america/us-latest.osm.pbf' ;;
+            uk) PBF_URL='https://download.geofabrik.de/europe/great-britain-latest.osm.pbf' ;;
+            germany) PBF_URL='https://download.geofabrik.de/europe/germany-latest.osm.pbf' ;;
+            france) PBF_URL='https://download.geofabrik.de/europe/france-latest.osm.pbf' ;;
+            spain) PBF_URL='https://download.geofabrik.de/europe/spain-latest.osm.pbf' ;;
+            *) PBF_URL='https://download.geofabrik.de/europe/monaco-latest.osm.pbf' ;;
+          esac;
+          echo \"Downloading map data for region: $$REGION\";
+          wget -O /data/map.osm.pbf $$PBF_URL || curl -L -o /data/map.osm.pbf $$PBF_URL;
+          osrm-extract -p /opt/car.lua /data/map.osm.pbf;
+          osrm-partition /data/map.osrm;
+          osrm-customize /data/map.osrm;
+          echo $$REGION > /data/region.txt;
+        fi;
+        osrm-routed --algorithm mld /data/map.osrm"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:5000 1>/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
 volumes:
   postgres_data:
   redis_data:
   static_files:
   media_files:
+  osrm_data:
 
 networks:
   radar_network:
