@@ -32,11 +32,6 @@ class RadarFilter(django_filters.FilterSet):
         help_text="Maximum speed limit"
     )
     
-    # Direction filtering
-    direction = django_filters.ChoiceFilter(
-        choices=Radar.DIRECTION_CHOICES,
-        help_text="Filter by direction"
-    )
     
     # Date filtering
     created_after = django_filters.DateTimeFilter(
@@ -66,7 +61,7 @@ class RadarFilter(django_filters.FilterSet):
     class Meta:
         model = Radar
         fields = [
-            'type', 'verified', 'active', 'direction',
+            'type', 'verified', 'active',
             'speed_limit_min', 'speed_limit_max',
             'created_after', 'created_before',
             'min_alerts', 'recently_detected'

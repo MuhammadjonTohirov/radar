@@ -1,5 +1,5 @@
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from django_filters.rest_framework import DjangoFilterBackend
@@ -8,6 +8,7 @@ from django.conf import settings
 from radars.models import Radar, RadarReport, DetectionLog
 from .serializers import RadarSerializer, RadarReportSerializer, DetectionLogSerializer
 from .filters import RadarFilter
+from .services.routing import RoutingService
 
 # Import GIS modules only if available
 if getattr(settings, 'HAS_GIS', False):
@@ -206,3 +207,46 @@ class DetectionLogViewSet(viewsets.ReadOnlyModelViewSet):
                 pass
         
         return queryset.select_related('radar')
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticatedOrReadOnly])
+def route_view(request):
+    """
+    Return a GeoJSON LineString between from and to coordinates.
+
+    Query params:
+      - from: "lon,lat"
+      - to:   "lon,lat"
+
+    Note: This placeholder returns a straight line. For production
+    routing, integrate with OSRM/Valhalla/GraphHopper and return
+    an actual road-following route.
+    """
+    coords_param = request.query_params.get('coords')
+    profile = request.query_params.get('profile') or 'driving'
+
+    coordinates = []
+    if coords_param:
+        # Expect "lon,lat;lon,lat;..."
+        try:
+            parts = [p.strip() for p in coords_param.split(';') if p.strip()]
+            for part in parts:
+                lon_str, lat_str = [v.strip() for v in part.split(',')]
+                coordinates.append((float(lon_str), float(lat_str)))
+        except Exception:
+            return Response({'detail': 'Invalid coords format. Use "lon,lat;lon,lat;..."'}, status=400)
+    else:
+        src = request.query_params.get('from')
+        dst = request.query_params.get('to')
+        if not src or not dst:
+            return Response({'detail': 'Provide either coords="lon,lat;..." or from/to as "lon,lat"'}, status=400)
+        try:
+            flon, flat = [float(x) for x in src.split(',')]
+            tlon, tlat = [float(x) for x in dst.split(',')]
+            coordinates = [(flon, flat), (tlon, tlat)]
+        except Exception:
+            return Response({'detail': 'Invalid coordinate format. Use "lon,lat".'}, status=400)
+
+    feature = RoutingService.get_route_coords(coordinates, profile=profile)
+    return Response(feature)

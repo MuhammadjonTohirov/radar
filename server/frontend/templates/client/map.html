@@ -1,0 +1,89 @@
+{% extends "frontend/base.html" %}
+{% load static %}
+
+{% block title %}Route Planner - Client Map{% endblock %}
+
+{% block content %}
+<div class="client-map-container" style="padding:16px;">
+  <h1>Route Planner</h1>
+
+  <div class="route-controls" style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px;">
+    <div style="flex:1; min-width:260px;">
+      <label for="from-input">From</label>
+      <div class="input-with-button">
+        <input id="from-input" type="text" placeholder="Search start location..." class="text-input">
+        <button id="from-pick-btn" type="button" class="btn pick-btn" title="Pick on map">🗺️</button>
+      </div>
+      <div id="from-results" class="search-results"></div>
+    </div>
+    <div style="flex:1; min-width:260px;">
+      <label for="to-input">To</label>
+      <div class="input-with-button">
+        <input id="to-input" type="text" placeholder="Search destination..." class="text-input">
+        <button id="to-pick-btn" type="button" class="btn pick-btn" title="Pick on map">🗺️</button>
+      </div>
+      <div id="to-results" class="search-results"></div>
+    </div>
+    <div>
+      <label for="proximity">Proximity (meters)</label>
+      <input id="proximity" type="number" value="50" min="10" max="500" step="10" style="width:120px; padding:8px;">
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button id="btn-route" class="btn btn-primary" type="button">Get Route</button>
+      <button id="btn-draw" class="btn btn-secondary" type="button">Draw Route</button>
+      <button id="btn-clear" class="btn btn-danger" type="button">Clear</button>
+    </div>
+  </div>
+
+  <div id="client-map" class="map-container"></div>
+
+  <div class="results" style="margin-top:12px;">
+    <strong>Impacted Radars:</strong> <span id="radar-count">0</span>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  window.CLIENT_CONFIG = {
+    apiRadarsUrl: '/api/radars/',
+    apiRouteUrl: '/api/route/',
+  };
+  // Client page relies on MapLibre, MapboxDraw from base.html
+</script>
+<!-- Turf.js for spatial computations on the client -->
+<script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+<script src="{% static 'frontend/js/client_map.js' %}"></script>
+  <style>
+  .search-results {
+    position: relative;
+  }
+  .search-results > .dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    max-height: 260px;
+    overflow-y: auto;
+    z-index: 10000;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  }
+  .search-results .item { padding: 8px; cursor: pointer; border-bottom: 1px solid #eee; }
+  .search-results .item:last-child { border-bottom: none; }
+  .search-results .item:hover { background: #f8f9fa; }
+  #client-map.map-container { height: 520px; }
+  .radar-marker.dim { opacity: 0.35; }
+  label { display:block; margin-bottom: 4px; font-weight: 600; }
+  h1 { margin-bottom: 8px; }
+  .route-controls .btn { height: 38px; }
+  @media (max-width: 640px) { .route-controls { flex-direction: column; align-items: stretch; } }
+
+  .input-with-button { display: flex; gap: 6px; align-items: center; }
+  .text-input { width: 100%; padding: 8px; }
+  .pick-btn { min-width: 40px; padding: 8px; line-height: 1; }
+  .pick-btn.active { background: #2da44e; border-color: #2da44e; }
+</style>
+{% endblock %}

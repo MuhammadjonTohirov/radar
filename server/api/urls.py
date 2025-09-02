@@ -9,4 +9,5 @@ router.register(r'detections', views.DetectionLogViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('route/', views.route_view, name='route'),
 ]

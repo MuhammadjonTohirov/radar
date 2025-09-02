@@ -27,7 +27,7 @@ class RadarSerializer(BaseRadarSerializer):
     class Meta:
         model = Radar
         fields = [
-            'id', 'type', 'speed_limit', 'direction', 'notes', 
+            'id', 'type', 'speed_limit', 'notes', 
             'verified', 'active', 'alert_count', 'last_detected',
             'created_at', 'updated_at', 'verified_at',
             'coordinates_display', 'created_by_username', 'verified_by_username'
@@ -71,7 +71,7 @@ class RadarListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Radar
         fields = [
-            'id', 'type', 'speed_limit', 'direction', 'verified', 
+            'id', 'type', 'speed_limit', 'verified', 
             'active', 'alert_count', 'coordinates_display', 'created_at'
         ]
 
@@ -120,7 +120,7 @@ class RadarCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Radar
         fields = [
-            'type', 'sector', 'speed_limit', 'direction', 'notes'
+            'type', 'sector', 'speed_limit', 'notes'
         ]
     
     def validate_sector(self, value):

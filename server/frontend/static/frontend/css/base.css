@@ -189,3 +189,69 @@
     font-size: 18px;
 }
 
+/* Radar polygon drawing control */
+.radar-polygon-control {
+    position: absolute;
+    top: 10px;
+    left: 52px;
+    z-index: 2;
+    background: white;
+    border: 2px solid rgba(0,0,0,0.1);
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: all 0.2s;
+}
+
+.radar-polygon-control:hover {
+    background: #f8f9fa;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.radar-polygon-control.active {
+    background: #417690;
+    color: white;
+    border-color: #417690;
+}
+
+.radar-polygon-control:before {
+    content: "⬟";
+    font-size: 18px;
+}
+
+/* Radar trash/clear control */
+.radar-trash-control {
+    position: absolute;
+    top: 10px;
+    left: 94px;
+    z-index: 2;
+    background: white;
+    border: 2px solid rgba(0,0,0,0.1);
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: all 0.2s;
+}
+
+.radar-trash-control:hover {
+    background: #f8f9fa;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.radar-trash-control:before {
+    content: "🗑️";
+    font-size: 16px;
+}
+

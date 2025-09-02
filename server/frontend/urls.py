@@ -7,6 +7,8 @@ urlpatterns = [
     path('', views.radar_list, name='radar_list'),
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
+    # Client
+    path('client/map/', views.client_map, name='client_map'),
     path('radars/', views.radar_list, name='radar_list'),
     path('radars/add/', views.radar_add, name='radar_add'),
     path('radars/<int:radar_id>/edit/', views.radar_edit, name='radar_edit'),

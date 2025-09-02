@@ -8,14 +8,13 @@ class RadarForm(forms.ModelForm):
     class Meta:
         model = Radar
         if getattr(settings, 'HAS_GIS', False):
-            fields = ['type', 'sector', 'speed_limit', 'direction', 'notes']
+            fields = ['type', 'sector', 'speed_limit', 'notes']
         else:
-            fields = ['type', 'sector_json', 'center_lat', 'center_lon', 'speed_limit', 'direction', 'notes']
+            fields = ['type', 'sector_json', 'center_lat', 'center_lon', 'speed_limit', 'notes']
         
         widgets = {
             'type': forms.Select(attrs={'class': 'form-control'}),
             'speed_limit': forms.NumberInput(attrs={'class': 'form-control', 'min': '10', 'max': '200'}),
-            'direction': forms.Select(attrs={'class': 'form-control'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),
         }
         

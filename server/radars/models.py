@@ -20,13 +20,6 @@ class Radar(models.Model):
         ("other", "Other")
     ]
     
-    DIRECTION_CHOICES = [
-        ("both", "Both Directions"),
-        ("north", "Northbound"),
-        ("south", "Southbound"),
-        ("east", "Eastbound"),
-        ("west", "Westbound")
-    ]
 
     # Core fields
     type = models.CharField(max_length=32, choices=TYPE_CHOICES, default="fixed_speed_camera")
@@ -42,7 +35,6 @@ class Radar(models.Model):
     
     # Metadata
     speed_limit = models.IntegerField(null=True, blank=True, help_text="Speed limit in km/h")
-    direction = models.CharField(max_length=20, choices=DIRECTION_CHOICES, blank=True, default="both")
     notes = models.TextField(blank=True, help_text="Additional notes about this radar")
     verified = models.BooleanField(default=False, help_text="Whether this radar has been verified")
     active = models.BooleanField(default=True, help_text="Whether this radar is currently active")
@@ -85,22 +77,10 @@ class Radar(models.Model):
         return f"{self.get_type_display()} - {self.id}"
 
     def save(self, *args, **kwargs):
-        # Auto-calculate center from polygon
-        if getattr(settings, 'HAS_GIS', False):
-            if hasattr(self, 'sector') and self.sector:
-                self.center = self.sector.centroid
-        else:
-            # For non-GIS mode, calculate center from polygon coordinates
-            if hasattr(self, 'sector_json') and self.sector_json:
-                try:
-                    coords = self.sector_json.get('coordinates', [[]])[0]
-                    if coords:
-                        lats = [coord[1] for coord in coords]
-                        lons = [coord[0] for coord in coords]
-                        self.center_lat = sum(lats) / len(lats)
-                        self.center_lon = sum(lons) / len(lons)
-                except (KeyError, IndexError, TypeError, ZeroDivisionError):
-                    pass
+        # Note: center_lat and center_lon should be set from the radar pin location,
+        # not calculated from polygon center. The polygon represents detection area,
+        # while center coordinates represent the actual radar device location.
+        # These coordinates are set by the form when user places the radar pin on the map.
         super().save(*args, **kwargs)
 
     def mark_verified(self, user=None):

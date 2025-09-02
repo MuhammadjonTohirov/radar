@@ -49,7 +49,6 @@
                     <th>Type</th>
                     <th>Location</th>
                     <th>Speed Limit</th>
-                    <th>Direction</th>
                     <th>Status</th>
                     <th>Created</th>
                     <th>Actions</th>
@@ -72,7 +71,6 @@
                             -
                         {% endif %}
                     </td>
-                    <td>{{ radar.get_direction_display }}</td>
                     <td>
                         {% if radar.verified %}
                             <span class="status-verified">✓ Verified</span>

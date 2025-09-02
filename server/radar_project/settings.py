@@ -52,15 +52,16 @@ INSTALLED_APPS = [
     'frontend',
 ]
 
-# Check if GDAL is available for GIS support
+# Disable GIS support for SQLite simplicity
+# You can enable this later if you want to use PostGIS
 HAS_GIS = False
-try:
-    import subprocess
-    subprocess.check_output(['gdal-config', '--version'])
-    INSTALLED_APPS.insert(-3, 'django.contrib.gis')
-    HAS_GIS = True
-except:
-    HAS_GIS = False
+# try:
+#     import subprocess
+#     subprocess.check_output(['gdal-config', '--version'])
+#     INSTALLED_APPS.insert(-3, 'django.contrib.gis')
+#     HAS_GIS = True
+# except:
+#     HAS_GIS = False
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -115,16 +116,28 @@ if DATABASE_URL.startswith('sqlite'):
             }
         }
 else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.contrib.gis.db.backends.postgis',
-            'NAME': config('DB_NAME', default='radar_db'),
-            'USER': config('DB_USER', default='radar_user'),
-            'PASSWORD': config('DB_PASSWORD', default='radar_pass_dev'),
-            'HOST': config('DB_HOST', default='localhost'),
-            'PORT': config('DB_PORT', default='5432'),
+    if HAS_GIS:
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.contrib.gis.db.backends.postgis',
+                'NAME': config('DB_NAME', default='radar_db'),
+                'USER': config('DB_USER', default='radar_user'),
+                'PASSWORD': config('DB_PASSWORD', default='radar_pass_dev'),
+                'HOST': config('DB_HOST', default='localhost'),
+                'PORT': config('DB_PORT', default='5432'),
+            }
         }
-    }
+    else:
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': config('DB_NAME', default='radar_db'),
+                'USER': config('DB_USER', default='radar_user'),
+                'PASSWORD': config('DB_PASSWORD', default='radar_pass_dev'),
+                'HOST': config('DB_HOST', default='localhost'),
+                'PORT': config('DB_PORT', default='5432'),
+            }
+        }
 
 
 # Password validation
@@ -207,3 +220,18 @@ STATICFILES_DIRS = [
 LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/login/'
+
+# Routing settings
+# Custom Radar2 routing service (preferred)
+CUSTOM_ROUTING_URL = config('CUSTOM_ROUTING_URL', default='http://localhost:5002')
+
+# Force enable custom routing service
+import os
+os.environ.setdefault('CUSTOM_ROUTING_URL', 'http://localhost:5002')
+
+# External routing providers (fallback)
+# Set the following envs to enable OSRM as secondary fallback:
+#   ROUTING_PROVIDER=osrm  
+#   ROUTING_BASE_URL=http://<host>:<port>
+ROUTING_PROVIDER = config('ROUTING_PROVIDER', default='fallback')
+ROUTING_BASE_URL = config('ROUTING_BASE_URL', default='')

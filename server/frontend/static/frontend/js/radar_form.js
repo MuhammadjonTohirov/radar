@@ -3,6 +3,9 @@ let map;
 let draw;
 let currentPolygon = null;
 let radarMarker = null;
+// Location search functionality with dropdown
+let searchResultsDiv = null;
+let searchMarker = null;
 
 // Initialize map
 function initMap() {
@@ -28,33 +31,145 @@ function initMap() {
         // Re-apply the intended initial view after the style fully loads.
         // Some styles or tiles can shift the rendered view until the style is ready,
         // and if the container had layout changes this ensures the correct zoom/center.
-        try {
-            // enforce the intended initial view
-            map.jumpTo({ center: [71.7761, 40.3836], zoom: 12 });
-            map.resize();
-        } catch (err) {
-            // Non-fatal — keep original behavior but log for debugging
-            console.warn('Failed to enforce initial center/zoom:', err);
-        }
+        // try {
+        //     // enforce the intended initial view
+        //     map.jumpTo({ center: [71.7761, 40.3836], zoom: 12 });
+        //     map.resize();
+        // } catch (err) {
+        //     // Non-fatal — keep original behavior but log for debugging
+        //     console.warn('Failed to enforce initial center/zoom:', err);
+        // }
         map.on('error', (err) => {
             console.error('Map error event:', err);
         });
+
+        // Control state variables
+        let pinModeActive = false;
+        let polygonModeActive = false;
 
         // Add radar location pin control
         const pinControl = document.createElement('div');
         pinControl.className = 'radar-pin-control';
         pinControl.title = 'Click to place radar location';
-        let pinModeActive = false;
 
+        // Add polygon drawing control
+        const polygonControl = document.createElement('div');
+        polygonControl.className = 'radar-polygon-control';
+        polygonControl.title = 'Click to draw detection area';
+
+        // Add trash/clear control
+        const trashControl = document.createElement('div');
+        trashControl.className = 'radar-trash-control';
+        trashControl.title = 'Clear all drawings';
+
+        // Event handlers (after all controls are created)
         pinControl.addEventListener('click', () => {
             pinModeActive = !pinModeActive;
             pinControl.classList.toggle('active', pinModeActive);
             pinControl.title = pinModeActive ? 'Click on map to place radar' : 'Click to place radar location';
+            
+            if (pinModeActive) {
+                // Deactivate polygon mode - don't call changeMode to avoid recursion
+                polygonModeActive = false;
+                polygonControl.classList.remove('active');
+                polygonControl.title = 'Click to draw detection area';
+            }
         });
 
-        // Add pin control to map container
+        polygonControl.addEventListener('click', () => {
+            polygonModeActive = !polygonModeActive;
+            polygonControl.classList.toggle('active', polygonModeActive);
+            
+            if (polygonModeActive) {
+                // Deactivate pin mode
+                pinModeActive = false;
+                pinControl.classList.remove('active');
+                pinControl.title = 'Click to place radar location';
+                
+                // Start drawing polygon
+                draw.changeMode('draw_polygon');
+                polygonControl.title = 'Drawing polygon - left-click to add points, double-click last point to finish, Esc or click button to cancel';
+                console.log('Polygon drawing mode activated');
+            } else {
+                // Exit drawing mode safely
+                try {
+                    // Use a timeout to avoid immediate recursion
+                    setTimeout(() => {
+                        draw.changeMode('simple_select');
+                    }, 10);
+                } catch (error) {
+                    console.warn('Error switching to simple_select mode:', error);
+                }
+                polygonControl.title = 'Click to draw detection area';
+                console.log('Polygon drawing mode deactivated');
+            }
+        });
+
+        trashControl.addEventListener('click', () => {
+            if (confirm('Clear all drawings on the map?')) {
+                // Clear all drawings
+                draw.deleteAll();
+                clearPolygon();
+                
+                // Remove radar marker
+                if (radarMarker) {
+                    radarMarker.remove();
+                    radarMarker = null;
+                }
+                
+                // Remove search marker
+                if (searchMarker) {
+                    searchMarker.remove();
+                    searchMarker = null;
+                }
+                
+                // Reset modes - don't call changeMode to avoid recursion
+                polygonModeActive = false;
+                pinModeActive = false;
+                polygonControl.classList.remove('active');
+                pinControl.classList.remove('active');
+                
+                // Reset titles
+                polygonControl.title = 'Click to draw detection area';
+                pinControl.title = 'Click to place radar location';
+            }
+        });
+
+        // Add controls to map container
         const mapContainer = document.getElementById('map');
-        if (mapContainer) mapContainer.appendChild(pinControl);
+        if (mapContainer) {
+            mapContainer.appendChild(pinControl);
+            mapContainer.appendChild(polygonControl);
+            mapContainer.appendChild(trashControl);
+        }
+
+        // Handle right-click - just prevent context menu
+        map.on('contextmenu', (e) => {
+            e.preventDefault(); // Prevent browser context menu
+            if (polygonModeActive) {
+                console.log('Right-click detected during polygon drawing - use double-click on last point to finish');
+            }
+        });
+
+        // Handle Escape key to cancel polygon drawing
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && polygonModeActive) {
+                // Cancel polygon drawing
+                polygonModeActive = false;
+                polygonControl.classList.remove('active');
+                polygonControl.title = 'Click to draw detection area';
+                
+                try {
+                    setTimeout(() => {
+                        draw.changeMode('simple_select');
+                    }, 10);
+                } catch (error) {
+                    console.warn('Error switching to simple_select mode:', error);
+                }
+                
+                console.log('Polygon drawing cancelled with Escape key');
+            }
+        });
 
         // Handle map clicks for radar location placement
         map.on('click', (e) => {
@@ -68,20 +183,19 @@ function initMap() {
                 radarMarker.remove();
             }
 
-            // Create radar marker element
+            // Create radar marker element (📡 emoji for clarity)
             const markerEl = document.createElement('div');
+            markerEl.textContent = '📡';
+            markerEl.title = 'Radar';
             markerEl.style.cssText = `
-                background: #dc3545;
-                width: 12px;
-                height: 12px;
-                border-radius: 50%;
-                border: 3px solid white;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                font-size: 18px;
+                line-height: 1;
+                filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
                 cursor: pointer;
             `;
 
             // Add radar marker to map
-            radarMarker = new maplibregl.Marker(markerEl)
+            radarMarker = new maplibregl.Marker({ element: markerEl })
                 .setLngLat([lng, lat])
                 .setPopup(new maplibregl.Popup().setHTML('<div><strong>Radar Location</strong></div>'))
                 .addTo(map);
@@ -107,16 +221,22 @@ function initMap() {
         draw = new MapboxDraw({
             displayControlsDefault: false,
             controls: {
-                polygon: true,
-                trash: true
+                polygon: false,
+                trash: false
             },
-            defaultMode: 'draw_polygon'
+            defaultMode: 'simple_select'
         });
 
         map.addControl(draw);
 
         // Handle drawing events
-        map.on('draw.create', updatePolygon);
+        map.on('draw.create', (e) => {
+            updatePolygon();
+            // Exit polygon drawing mode after creating a polygon - don't call changeMode to avoid recursion
+            polygonModeActive = false;
+            polygonControl.classList.remove('active');
+            polygonControl.title = 'Click to draw detection area';
+        });
         map.on('draw.delete', clearPolygon);
         map.on('draw.update', updatePolygon);
 
@@ -147,8 +267,14 @@ function updatePolygon() {
         // Update form fields
         if (!radarData.hasGIS) {
             document.getElementById(radarData.sectorJsonId).value = JSON.stringify(polygon.geometry);
-            document.getElementById(radarData.centerLatId).value = centerLat;
-            document.getElementById(radarData.centerLonId).value = centerLon;
+            
+            // Only set center coordinates if they haven't been set by pin placement
+            // The center coordinates should represent the actual radar location (pin), not polygon center
+            const centerLatEl = document.getElementById(radarData.centerLatId);
+            const centerLonEl = document.getElementById(radarData.centerLonId);
+            if (!centerLatEl.value || !centerLonEl.value) {
+                console.warn('No radar pin location set. Please place a radar pin on the map to set the radar location.');
+            }
         }
         
         // Show polygon info
@@ -166,8 +292,12 @@ function clearPolygon() {
     
     if (!radarData.hasGIS) {
         document.getElementById(radarData.sectorJsonId).value = '';
-        document.getElementById(radarData.centerLatId).value = '';
-        document.getElementById(radarData.centerLonId).value = '';
+        // Don't clear center coordinates here - they represent radar pin location, not polygon center
+        // Only clear them if there's no radar pin marker
+        if (!radarMarker) {
+            document.getElementById(radarData.centerLatId).value = '';
+            document.getElementById(radarData.centerLonId).value = '';
+        }
     }
 }
 
@@ -216,20 +346,19 @@ function loadExistingRadarLocation() {
                     radarMarker.remove();
                 }
                 
-                // Create radar marker element
+                // Create radar marker element (📡 emoji for clarity)
                 const markerEl = document.createElement('div');
+                markerEl.textContent = '📡';
+                markerEl.title = 'Radar';
                 markerEl.style.cssText = `
-                    background: #dc3545;
-                    width: 12px;
-                    height: 12px;
-                    border-radius: 50%;
-                    border: 3px solid white;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                    font-size: 18px;
+                    line-height: 1;
+                    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
                     cursor: pointer;
                 `;
                 
                 // Add radar marker to map
-                radarMarker = new maplibregl.Marker(markerEl)
+                radarMarker = new maplibregl.Marker({ element: markerEl })
                     .setLngLat([lng, lat])
                     .setPopup(new maplibregl.Popup().setHTML('<div><strong>Radar Location</strong></div>'))
                     .addTo(map);
@@ -237,10 +366,6 @@ function loadExistingRadarLocation() {
         }
     }
 }
-
-// Location search functionality with dropdown
-let searchResultsDiv = null;
-
 function createSearchResultsDiv() {
     if (!searchResultsDiv) {
         searchResultsDiv = document.createElement('div');
@@ -349,8 +474,6 @@ function displaySearchResults(results, resultsDiv) {
     });
 }
 
-let searchMarker = null;
-
 function addSearchMarker(lon, lat, name) {
     // Remove existing search marker
     if (searchMarker) {
@@ -373,6 +496,26 @@ function addSearchMarker(lon, lat, name) {
         .setLngLat([lon, lat])
         .setPopup(new maplibregl.Popup().setHTML(`<div style="font-weight: bold;">${name}</div>`))
         .addTo(map);
+}
+// Form validation
+function validateRadarForm(e) {
+    if (!radarData.hasGIS) {
+        const sectorData = document.getElementById(radarData.sectorJsonId).value;
+        const centerLat = document.getElementById(radarData.centerLatId).value;
+        const centerLon = document.getElementById(radarData.centerLonId).value;
+        
+        if (!sectorData) {
+            e.preventDefault();
+            alert('Please draw a detection area polygon on the map.');
+            return false;
+        }
+        
+        if (!centerLat || !centerLon) {
+            e.preventDefault();
+            alert('Please place a radar pin on the map to mark the radar location.');
+            return false;
+        }
+    }
 }
 
 // Initialize search functionality and map when page loads
@@ -399,15 +542,3 @@ document.addEventListener('DOMContentLoaded', function() {
         form.addEventListener('submit', validateRadarForm);
     }
 });
-
-// Form validation
-function validateRadarForm(e) {
-    if (!radarData.hasGIS) {
-        const sectorData = document.getElementById(radarData.sectorJsonId).value;
-        if (!sectorData) {
-            e.preventDefault();
-            alert('Please draw a detection area polygon on the map.');
-            return false;
-        }
-    }
-}

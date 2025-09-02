@@ -17,11 +17,11 @@ else:
 @admin.register(Radar)
 class RadarAdmin(BaseRadarAdmin):
     list_display = [
-        'id', 'type', 'coordinates_display', 'speed_limit', 'direction',
+        'id', 'type', 'coordinates_display', 'speed_limit',
         'verified', 'active', 'alert_count', 'created_at'
     ]
     list_filter = [
-        'type', 'verified', 'active', 'direction', 'created_at',
+        'type', 'verified', 'active', 'created_at',
         'speed_limit'
     ]
     search_fields = ['notes', 'id']
@@ -42,7 +42,7 @@ class RadarAdmin(BaseRadarAdmin):
                 'fields': radar_fields
             }),
             ('Traffic Details', {
-                'fields': ['speed_limit', 'direction', 'notes']
+                'fields': ['speed_limit', 'notes']
             }),
             ('Status', {
                 'fields': ['verified', 'active']

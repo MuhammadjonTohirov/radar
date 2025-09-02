@@ -1,22 +1,18 @@
-FROM python:3.12-slim
+FROM python:3.12-alpine
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # Install system dependencies
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
+RUN apk add --no-cache \
         postgresql-client \
-        gdal-bin \
-        libgdal-dev \
-        gettext \
         gcc \
-        g++ \
-        binutils \
-        libproj-dev \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+        musl-dev \
+        postgresql-dev \
+        python3-dev \
+        libffi-dev \
+        build-base
 
 # Set work directory
 WORKDIR /app

@@ -133,3 +133,9 @@ def radar_delete(request, radar_id):
         return redirect('frontend:radar_list')
     
     return render(request, 'frontend/radar_confirm_delete.html', {'radar': radar})
+
+
+@login_required
+def client_map(request):
+    """Public client page for planning a route and seeing impacted radars."""
+    return render(request, 'client/map.html')
