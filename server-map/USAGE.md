@@ -11,13 +11,23 @@ cd server-map
 pip install -r requirements.txt
 ```
 
-### 2. Start the Service
+### 2. Load Uzbekistan OSM into PostgreSQL (no Docker)
+
+Requires PostgreSQL with PostGIS and pgRouting, plus `osm2pgrouting`.
+
+```bash
+python -m pg_loader --pbf server-map/uzbekistan-250901.osm.pbf \
+  --host localhost --port 5432 --db radar_db --user radar_user \
+  --password radar_pass_dev --schema public --clean
+```
+
+### 3. Start the Service
 
 ```bash
 python app.py
 ```
 
-The service will start on `http://localhost:5002`
+The service starts on `http://localhost:5002` and prefers `pg` backend.
 
 ### 3. Test the Service
 
@@ -36,7 +46,8 @@ Generate a route between two coordinates.
 - `from` (required): Start coordinate as "lat,lon"
 - `to` (required): End coordinate as "lat,lon"  
 - `algorithm` (optional): Routing algorithm to use
-  - `smart` (default): Intelligent routing with realistic detours
+  - `pg` (default): PostgreSQL pgRouting (real roads from OSM)
+  - `smart`: Intelligent routing with realistic detours
   - `grid`: City-style grid routing
   - `curved`: Smooth highway-style routing
   - `direct`: Straight-line routing
@@ -104,8 +115,8 @@ Service health check.
   "status": "healthy",
   "service": "Radar2 Routing Service",
   "version": "1.0.0",
-  "algorithms_available": 4,
-  "default_algorithm": "smart"
+  "algorithms_available": 5,
+  "default_algorithm": "pg"
 }
 ```
 

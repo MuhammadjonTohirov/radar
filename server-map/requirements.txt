@@ -1,22 +1,18 @@
 # Radar2 Map Routing Service Dependencies
-# Minimal dependencies for lightweight routing service
+# Dependencies for routing service with PostgreSQL backend
 
+# Core Flask service
 flask==3.0.0
 flask-cors==4.0.0
 
-# Math and geometry calculations
-numpy==1.24.3
+# PostgreSQL client for pgRouting backend
+# Note: psycopg2-binary may need special installation on some systems
+# Alternative: brew install postgresql && pip install psycopg2
+psycopg2-binary>=2.9.7
 
-# Optional: For enhanced mathematical functions
-scipy==1.11.3
+# JSON handling for PostgreSQL responses
+# (built-in json module is sufficient)
 
-# Optional OSM graph-based routing (uses local PBF)
-pyrosm==0.6.2
-networkx==3.2.1
-shapely==2.0.3
-pandas==2.2.2
-
-# Development and testing
-pytest==7.4.3
-black==23.9.1
-flake8==6.1.0
+# Development and testing (optional)
+pytest>=7.4.0
+requests>=2.31.0

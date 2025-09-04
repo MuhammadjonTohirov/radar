@@ -7,6 +7,48 @@ let radarMarker = null;
 let searchResultsDiv = null;
 let searchMarker = null;
 
+// Helper: parse a coordinate string accepting "lat,lon" or "lon,lat"
+function parseCoordString(v) {
+    if (!v || v.indexOf(',') === -1) return null;
+    const cleaned = v.replace(/[^0-9.,\-\s]/g, '');
+    const parts = cleaned.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length !== 2) return null;
+    let a = parseFloat(parts[0]);
+    let b = parseFloat(parts[1]);
+    if (Number.isNaN(a) || Number.isNaN(b)) return null;
+    // Determine order by plausible ranges
+    let lat, lon;
+    if (Math.abs(a) <= 90 && Math.abs(b) <= 180) { lat = a; lon = b; }
+    else if (Math.abs(b) <= 90 && Math.abs(a) <= 180) { lat = b; lon = a; }
+    else return null;
+    return { lon, lat };
+}
+
+// Helper: place radar pin and update hidden fields, recenter map (keep current zoom)
+function placeRadarPin(lon, lat) {
+    if (radarMarker) { radarMarker.remove(); }
+    const markerEl = document.createElement('div');
+    markerEl.textContent = '📡';
+    markerEl.title = 'Radar';
+    markerEl.style.cssText = `
+        font-size: 18px;
+        line-height: 1;
+        filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4));
+        cursor: pointer;
+    `;
+    radarMarker = new maplibregl.Marker({ element: markerEl })
+        .setLngLat([lon, lat])
+        .setPopup(new maplibregl.Popup().setHTML('<div><strong>Radar Location</strong></div>'))
+        .addTo(map);
+
+    // Update hidden form fields
+    if (typeof radarData !== 'undefined' && !radarData.hasGIS) {
+        document.getElementById(radarData.centerLatId).value = Number(lat).toFixed(6);
+        document.getElementById(radarData.centerLonId).value = Number(lon).toFixed(6);
+    }
+    try { map.easeTo({ center: [lon, lat], duration: 600 }); } catch(_) {}
+}
+
 // Initialize map
 function initMap() {
     // Try one of these public style JSONs (pick the one that shows desired map detail):
@@ -394,6 +436,16 @@ async function searchLocation(e) {
     const query = e.target.value.trim();
     const resultsDiv = createSearchResultsDiv();
     
+    // Accept direct lat,lon input
+    const coord = parseCoordString(query);
+    if (coord) {
+        // Set radar pin directly and normalize the field text
+        placeRadarPin(coord.lon, coord.lat);
+        e.target.value = `${coord.lat.toFixed(6)}, ${coord.lon.toFixed(6)}`;
+        resultsDiv.style.display = 'none';
+        return;
+    }
+
     if (query.length < 3) {
         resultsDiv.style.display = 'none';
         return;
@@ -454,20 +506,13 @@ function displaySearchResults(results, resultsDiv) {
             const lon = parseFloat(result.lon);
             
             // Update search input
-            document.getElementById('location-search').value = result.display_name.split(',')[0];
+            document.getElementById('location-search').value = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
             
             // Hide results
             resultsDiv.style.display = 'none';
             
-            // Fly to location
-            map.flyTo({
-                center: [lon, lat],
-                zoom: 15,
-                duration: 2000
-            });
-            
-            // Add a marker for the searched location
-            addSearchMarker(lon, lat, result.display_name.split(',')[0]);
+            // Place radar pin at selected search location
+            placeRadarPin(lon, lat);
         });
         
         resultsDiv.appendChild(item);
@@ -523,6 +568,23 @@ document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('location-search');
     if (searchInput) {
         searchInput.addEventListener('input', debounce(searchLocation, 300));
+        // Accept coordinates on Enter/blur too
+        searchInput.addEventListener('keydown', function(ev) {
+            if (ev.key === 'Enter') {
+                const c = parseCoordString(searchInput.value.trim());
+                if (c) {
+                    placeRadarPin(c.lon, c.lat);
+                    searchInput.value = `${c.lat.toFixed(6)}, ${c.lon.toFixed(6)}`;
+                }
+            }
+        });
+        searchInput.addEventListener('blur', function() {
+            const c = parseCoordString(searchInput.value.trim());
+            if (c) {
+                placeRadarPin(c.lon, c.lat);
+                searchInput.value = `${c.lat.toFixed(6)}, ${c.lon.toFixed(6)}`;
+            }
+        });
         
         // Hide results when clicking outside
         document.addEventListener('click', function(e) {

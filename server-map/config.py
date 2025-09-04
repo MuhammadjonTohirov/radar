@@ -23,26 +23,32 @@ CORS_ORIGINS = [
 ]
 
 # =============================================================================
-# OSM GRAPH BACKEND (OPTIONAL)
+# OSM/PG BACKENDS
 # =============================================================================
 
-# Path to local OSM PBF file (e.g., Uzbekistan extract). If provided and
-# dependencies are installed, the routing service can use a real road graph.
-OSM_PBF_PATH = 'server-map/uzbekistan-250901.osm.pbf'
+# Path to local OSM PBF file (Uzbekistan extract used by default)
+OSM_PBF_PATH = 'uzbekistan-250901.osm.pbf'
 
-# Select routing backend/algorithm default. Options:
-#  - 'osm'      -> use OSM graph (pyrosm+networkx) when available
-#  - 'smart'    -> synthetic smart algorithm (default fallback)
-#  - 'grid'/'curved'/'direct' -> other synthetic algorithms
-DEFAULT_ALGORITHM = 'smart'
-DEFAULT_BACKEND = 'osm'
+# PostgreSQL (direct, no Docker) for pgRouting with OSM data
+PG_ROUTING_ENABLED = True
+PG_HOST = 'localhost'
+PG_PORT = 5433
+PG_DB = 'radar_db'
+PG_USER = 'radar_user'
+PG_PASSWORD = 'radar_pass_dev'
+PG_SCHEMA = 'public'
+PG_SNAP_TOLERANCE_M = 200
+
+# Default backend preference: 'pg' (PostgreSQL), 'osm' (pyrosm), or synthetic
+DEFAULT_BACKEND = 'pg'
+DEFAULT_ALGORITHM = 'pg'
 
 # =============================================================================
 # ROUTING ALGORITHM PARAMETERS
 # =============================================================================
 
-# Default routing algorithm ('smart', 'grid', 'curved', 'direct')
-DEFAULT_ALGORITHM = 'smart'
+# Synthetic algorithm default if real backends unavailable ('smart', 'grid', 'curved', 'direct')
+FALLBACK_ALGORITHM = 'smart'
 
 # Smart routing configuration
 SMART_ROUTING = {

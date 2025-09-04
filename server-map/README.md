@@ -1,19 +1,21 @@
 # Radar2 Map Routing Service
 
-A lightweight routing service that generates routes between coordinates without external dependencies.
+A lightweight routing service that generates routes between coordinates. Supports real on-road routing via PostgreSQL (PostGIS + pgRouting) using the included Uzbekistan OSM extract.
 
 ## Overview
 
 This service provides multiple routing algorithms to generate realistic routes between GPS coordinates:
 
-1. **Smart Routing** - Intelligent pathfinding with road-like curves and realistic detours
-2. **Grid Routing** - City-style routing following grid patterns
-3. **Curved Routing** - Smooth curved paths for highways and rural roads
-4. **Direct Routing** - Straight-line fallback for basic distance calculation
+1. **PostgreSQL (pgRouting)** - Accurate routing over OSM ways stored in PostgreSQL
+2. **Smart Routing** - Intelligent pathfinding with road-like curves and realistic detours
+3. **Grid Routing** - City-style routing following grid patterns
+4. **Curved Routing** - Smooth curved paths for highways and rural roads
+5. **Direct Routing** - Straight-line fallback for basic distance calculation
 
 ## Features
 
-- 🚀 **No External Dependencies** - Pure Python implementation
+- 🐘 **PostgreSQL-backed** - Uses pgRouting + PostGIS for real roads
+- 🚀 **No External Services** - Runs locally, no Docker required
 - 🗺️ **Multiple Algorithms** - Different routing styles for various scenarios  
 - 📍 **Realistic Routes** - Generates believable paths that follow road patterns
 - 🔧 **Configurable** - Adjustable parameters for different routing needs
@@ -51,13 +53,27 @@ print(f"Duration: {route['properties']['duration_s']:.0f}s")
 
 ```bash
 cd server-map
+# Minimal install for PostgreSQL backend only (no heavy builds)
 pip install -r requirements.txt
+
+# Load Uzbekistan OSM into PostgreSQL (requires osm2pgrouting installed on your system)
+python -m pg_loader --pbf server-map/uzbekistan-250901.osm.pbf \
+  --host localhost --port 5432 --db radar_db --user radar_user \
+  --password radar_pass_dev --schema public --clean
+
+# Start the routing service
 python app.py
 ```
 
 ## Configuration
 
-Edit `config.py` to customize routing behavior:
+Edit `config.py` to set PostgreSQL connection and behavior:
+
+- `PG_ROUTING_ENABLED=True` (default)
+- `PG_HOST`, `PG_PORT`, `PG_DB`, `PG_USER`, `PG_PASSWORD`, `PG_SCHEMA`
+- `DEFAULT_BACKEND='pg'` (preferred)
+
+You can still tune synthetic algorithm behavior:
 
 - Route complexity levels
 - Speed calculations

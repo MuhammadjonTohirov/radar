@@ -16,7 +16,6 @@ Author: Radar2 Development Team
 import math
 import random
 from typing import List, Tuple, Dict, Any, Optional
-import numpy as np
 from dataclasses import dataclass
 import config
 
@@ -398,7 +397,9 @@ class RoutingService:
             'curved': CurvedRouter(),
             'direct': DirectRouter(),
         }
-        # Try to register OSM-backed router if PBF exists and deps are present
+        # Register PostgreSQL-backed router if available (preferred)
+        self._register_pg_router_if_available()
+        # Register OSM-backed router if PBF exists and deps are present
         self._register_osm_router_if_available()
     
     def get_route(self, start_lat: float, start_lon: float, 
@@ -418,8 +419,12 @@ class RoutingService:
             GeoJSON Feature with route geometry and properties
         """
         if algorithm is None:
-            # Prefer OSM backend when configured
-            algorithm = (config.DEFAULT_BACKEND if hasattr(config, 'DEFAULT_BACKEND') else None) or config.DEFAULT_ALGORITHM
+            # Prefer configured backend; fall back to synthetic
+            preferred = getattr(config, 'DEFAULT_BACKEND', None)
+            if preferred and preferred in self.algorithms:
+                algorithm = preferred
+            else:
+                algorithm = getattr(config, 'FALLBACK_ALGORITHM', 'smart')
         
         if algorithm not in self.algorithms:
             raise ValueError(f"Unknown algorithm: {algorithm}. Available: {list(self.algorithms.keys())}")
@@ -472,6 +477,11 @@ class RoutingService:
     def get_available_algorithms(self) -> List[Dict[str, str]]:
         """Return list of available routing algorithms with descriptions"""
         algs = [
+            {
+                "name": "pg",
+                "description": "pgRouting over PostgreSQL/PostGIS using imported OSM ways",
+                "best_for": "Accurate on-road routing in Uzbekistan extract"
+            },
             {
                 "name": "smart",
                 "description": "Intelligent routing with realistic detours and urban/highway awareness",
@@ -666,4 +676,312 @@ class RoutingService:
                 pass
         except Exception:
             # Dependencies not installed or other error – silently skip.
+            return
+
+    # ---------------------------------------------------------------------
+    # PostgreSQL pgRouting-backed Router Registration
+    # ---------------------------------------------------------------------
+    def _register_pg_router_if_available(self):
+        """Register a PostgreSQL-backed router using pgRouting if available."""
+        try:
+            if not getattr(config, 'PG_ROUTING_ENABLED', False):
+                return
+            import psycopg2  # noqa: F401
+            from psycopg2.extras import RealDictCursor  # noqa: F401
+
+            class PGRoutingRouter(RouteGenerator):
+                def __init__(self):
+                    super().__init__()
+                    self.host = config.PG_HOST
+                    self.port = config.PG_PORT
+                    self.db = config.PG_DB
+                    self.user = config.PG_USER
+                    self.password = config.PG_PASSWORD
+                    self.schema = config.PG_SCHEMA
+                    self.snap_tol_m = getattr(config, 'PG_SNAP_TOLERANCE_M', 2000)
+                    self._validate_schema_name()
+
+                def _conn(self):
+                    import psycopg2
+                    return psycopg2.connect(
+                        dbname=self.db,
+                        user=self.user,
+                        password=self.password,
+                        host=self.host,
+                        port=self.port,
+                    )
+
+                def _validate_schema_name(self):
+                    # basic safeguard: allow alnum + underscore only
+                    import re
+                    if not re.fullmatch(r"[A-Za-z0-9_]+", self.schema):
+                        raise ValueError("Invalid PG_SCHEMA; use alphanumerics/underscore only")
+
+                def _geom_cols(self, cur):
+                    cur.execute(
+                        """
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_schema=%s AND table_name='ways_vertices_pgr'
+                          AND column_name IN ('the_geom','geom')
+                        LIMIT 1
+                        """,
+                        (self.schema,)
+                    )
+                    row = cur.fetchone()
+                    if not row:
+                        raise RuntimeError("ways_vertices_pgr missing; load OSM via osm2pgrouting")
+                    v_geom = row['column_name']
+
+                    cur.execute(
+                        """
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_schema=%s AND table_name='ways'
+                          AND column_name IN ('the_geom','geom')
+                        LIMIT 1
+                        """,
+                        (self.schema,)
+                    )
+                    row = cur.fetchone()
+                    if not row:
+                        raise RuntimeError("ways table missing; load OSM via osm2pgrouting")
+                    e_geom = row['column_name']
+                    return v_geom, e_geom
+
+                def generate_route(self, start: Coordinate, end: Coordinate, **kwargs) -> List[Coordinate]:
+                    import json as _json
+                    from psycopg2.extras import RealDictCursor
+                    conn = self._conn()
+                    try:
+                        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                            v_geom, e_geom = self._geom_cols(cur)
+
+                            # Nearest vertices
+                            cur.execute(
+                                f"""
+                                SELECT id FROM {self.schema}.ways_vertices_pgr
+                                ORDER BY {v_geom} <-> ST_SetSRID(ST_Point(%s, %s), 4326)
+                                LIMIT 1
+                                """,
+                                (start.lon, start.lat)
+                            )
+                            srow = cur.fetchone()
+                            cur.execute(
+                                f"""
+                                SELECT id FROM {self.schema}.ways_vertices_pgr
+                                ORDER BY {v_geom} <-> ST_SetSRID(ST_Point(%s, %s), 4326)
+                                LIMIT 1
+                                """,
+                                (end.lon, end.lat)
+                            )
+                            erow = cur.fetchone()
+                            if not srow or not erow:
+                                return [start, end]
+                            source_id, target_id = int(srow['id']), int(erow['id'])
+
+                            # Shortest path by length
+                            cur.execute(
+                                f"""
+                                WITH path AS (
+                                    SELECT * FROM pgr_dijkstra(
+                                        $$
+                                        SELECT gid AS id, source, target, length AS cost
+                                        FROM {self.schema}.ways
+                                        $$,
+                                        %s, %s, directed := true
+                                    )
+                                ),
+                                geom_path AS (
+                                    SELECT ST_LineMerge(ST_Union(w.{e_geom})) AS geom
+                                    FROM path p
+                                    JOIN {self.schema}.ways w ON p.edge = w.gid
+                                    WHERE p.edge <> -1
+                                )
+                                SELECT ST_AsGeoJSON(geom) AS geojson
+                                FROM geom_path
+                                """,
+                                (source_id, target_id)
+                            )
+                            prow = cur.fetchone()
+                            if not prow or not prow.get('geojson'):
+                                return [start, end]
+                            gj = _json.loads(prow['geojson'])
+                            coords = gj.get('coordinates') or []
+                            if gj.get('type') == 'MultiLineString':
+                                flat = []
+                                for seg in coords:
+                                    flat.extend(seg)
+                                coords = flat
+                            # Convert to Coordinate list
+                            waypoints: List[Coordinate] = []
+                            for lon, lat in coords:
+                                waypoints.append(Coordinate(lat, lon))
+                            if waypoints:
+                                waypoints[0] = start
+                                waypoints[-1] = end
+                            if not waypoints:
+                                return [start, end]
+                            return waypoints
+                    finally:
+                        conn.close()
+
+            # Register geometric routing with umap database
+            class UmapGeometricRouter(RouteGenerator):
+                def __init__(self):
+                    super().__init__()
+                    self.host = config.PG_HOST
+                    self.port = config.PG_PORT
+                    self.db = config.PG_DB
+                    self.user = config.PG_USER
+                    self.password = config.PG_PASSWORD
+                    self.schema = config.PG_SCHEMA
+
+                def generate_route(self, start, end):
+                    """Generate route using closest road projection approach"""
+                    print(f"UmapGeometricRouter: Routing from {start.lat},{start.lon} to {end.lat},{end.lon}")
+                    import psycopg2
+                    from psycopg2.extras import RealDictCursor
+                    import json as _json
+                    import math
+
+                    try:
+                        conn = psycopg2.connect(
+                            host=self.host,
+                            port=self.port,
+                            dbname=self.db,
+                            user=self.user,
+                            password=self.password
+                        )
+                        cur = conn.cursor(cursor_factory=RealDictCursor)
+                        
+                        # Find the road closest to start point and project onto it
+                        start_lon, start_lat = start.lon, start.lat
+                        end_lon, end_lat = end.lon, end.lat
+                        
+                        # Get the best route using direct PostGIS road projection
+                        cur.execute(f"""
+                            WITH route_corridor AS (
+                                -- Get roads in a corridor between start and end points
+                                SELECT 
+                                    ogc_fid,
+                                    name,
+                                    fclass,
+                                    way,
+                                    ST_Transform(way, 4326) as way_4326,
+                                    CASE 
+                                        WHEN fclass IN ('motorway', 'trunk') THEN 1
+                                        WHEN fclass IN ('primary', 'secondary') THEN 2  
+                                        WHEN fclass IN ('tertiary', 'unclassified') THEN 3
+                                        WHEN fclass IN ('residential', 'living_street') THEN 4
+                                        ELSE 5
+                                    END as priority
+                                FROM {self.schema}.planet_osm_roads 
+                                WHERE ST_DWithin(
+                                    ST_Transform(way, 4326),
+                                    ST_MakeLine(
+                                        ST_SetSRID(ST_Point(%s, %s), 4326),
+                                        ST_SetSRID(ST_Point(%s, %s), 4326)  
+                                    ),
+                                    0.015  -- 1.5km buffer around direct line
+                                )
+                                AND fclass NOT IN ('footway', 'path', 'steps', 'cycleway')
+                            ),
+                            best_route AS (
+                                -- Find the road that provides the best connection
+                                SELECT 
+                                    r.*,
+                                    ST_LineLocatePoint(r.way_4326, ST_SetSRID(ST_Point(%s, %s), 4326)) as start_fraction,
+                                    ST_LineLocatePoint(r.way_4326, ST_SetSRID(ST_Point(%s, %s), 4326)) as end_fraction,
+                                    ST_Distance(r.way_4326, ST_SetSRID(ST_Point(%s, %s), 4326)) as start_distance,
+                                    ST_Distance(r.way_4326, ST_SetSRID(ST_Point(%s, %s), 4326)) as end_distance
+                                FROM route_corridor r
+                                ORDER BY 
+                                    (ST_Distance(r.way_4326, ST_SetSRID(ST_Point(%s, %s), 4326)) + 
+                                     ST_Distance(r.way_4326, ST_SetSRID(ST_Point(%s, %s), 4326))) * r.priority
+                                LIMIT 1
+                            )
+                            SELECT 
+                                name,
+                                fclass,
+                                start_fraction,
+                                end_fraction,
+                                start_distance,
+                                end_distance,
+                                ST_AsGeoJSON(
+                                    CASE 
+                                        WHEN start_fraction <= end_fraction THEN
+                                            ST_LineSubstring(way_4326, start_fraction, end_fraction)
+                                        ELSE 
+                                            ST_Reverse(ST_LineSubstring(way_4326, end_fraction, start_fraction))
+                                    END
+                                ) as route_geometry
+                            FROM best_route
+                        """, (start_lon, start_lat, end_lon, end_lat, 
+                              start_lon, start_lat, end_lon, end_lat,
+                              start_lon, start_lat, end_lon, end_lat,
+                              start_lon, start_lat, end_lon, end_lat))
+                        
+                        result = cur.fetchone()
+                        
+                        if not result or not result['route_geometry']:
+                            # Fallback: return direct line if no suitable road found
+                            return [start, end]
+                        
+                        # Parse the road geometry
+                        geom = _json.loads(result['route_geometry'])
+                        
+                        if geom['type'] != 'LineString' or not geom['coordinates']:
+                            return [start, end]
+                        
+                        # Convert coordinates to waypoints
+                        coords = geom['coordinates']
+                        waypoints = [start]  # Always start with exact start point
+                        
+                        # Add road points (sample every few points to avoid too much detail)
+                        step = max(1, len(coords) // 20)  # Max 20 intermediate points
+                        for i in range(0, len(coords), step):
+                            lon, lat = coords[i]
+                            waypoints.append(Coordinate(lat, lon))
+                        
+                        # Ensure we have the final point
+                        if len(coords) > 1:
+                            final_lon, final_lat = coords[-1]
+                            waypoints.append(Coordinate(final_lat, final_lon))
+                            
+                        waypoints.append(end)  # Always end with exact end point
+                        
+                        return waypoints
+                        
+                    except Exception as e:
+                        import traceback
+                        print(f"Geometric routing error: {e}")
+                        print(f"Traceback: {traceback.format_exc()}")
+                        return [start, end]
+                    finally:
+                        if 'conn' in locals():
+                            conn.close()
+
+                def _haversine_distance(self, coord1, coord2):
+                    """Calculate distance between two coordinates in meters"""
+                    import math
+                    
+                    lat1, lon1 = math.radians(coord1.lat), math.radians(coord1.lon)
+                    lat2, lon2 = math.radians(coord2.lat), math.radians(coord2.lon)
+                    
+                    dlat = lat2 - lat1
+                    dlon = lon2 - lon1
+                    
+                    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+                    c = 2 * math.asin(math.sqrt(a))
+                    r = 6371000  # Earth's radius in meters
+                    
+                    return c * r
+
+            # Try a quick connectivity check
+            router = PGRoutingRouter()
+            # Best-effort: only register; runtime will handle errors gracefully
+            self.algorithms['pg'] = router
+        except Exception:
+            # If anything fails, skip PG router registration silently
             return

@@ -11,35 +11,63 @@
     <div style="flex:1; min-width:260px;">
       <label for="from-input">From</label>
       <div class="input-with-button">
-        <input id="from-input" type="text" placeholder="Search start location..." class="text-input">
-        <button id="from-pick-btn" type="button" class="btn pick-btn" title="Pick on map">🗺️</button>
+        <input id="from-input" type="text" placeholder="Search start location... (or paste lat,lon)" class="text-input">
+        <button id="from-pick-btn" type="button" class="btn icon-btn" aria-label="Pick start on map" title="Pick start on map">📍</button>
       </div>
       <div id="from-results" class="search-results"></div>
     </div>
     <div style="flex:1; min-width:260px;">
       <label for="to-input">To</label>
       <div class="input-with-button">
-        <input id="to-input" type="text" placeholder="Search destination..." class="text-input">
-        <button id="to-pick-btn" type="button" class="btn pick-btn" title="Pick on map">🗺️</button>
+        <input id="to-input" type="text" placeholder="Search destination... (or paste lat,lon)" class="text-input">
+        <button id="to-pick-btn" type="button" class="btn icon-btn" aria-label="Pick destination on map" title="Pick destination on map">🏁</button>
       </div>
       <div id="to-results" class="search-results"></div>
     </div>
     <div>
-      <label for="proximity">Proximity (meters)</label>
-      <input id="proximity" type="number" value="50" min="10" max="500" step="10" style="width:120px; padding:8px;">
+      <label for="proximity">Tolerance (m)</label>
+      <input id="proximity" type="number" value="5" min="1" max="100" step="1" style="width:120px; padding:8px;">
     </div>
     <div style="display:flex; gap:8px;">
-      <button id="btn-route" class="btn btn-primary" type="button">Get Route</button>
-      <button id="btn-draw" class="btn btn-secondary" type="button">Draw Route</button>
-      <button id="btn-clear" class="btn btn-danger" type="button">Clear</button>
+      <button id="btn-clear" class="btn btn-danger" type="button" title="Clear markers and route">Clear</button>
     </div>
   </div>
 
-  <div id="client-map" class="map-container"></div>
-
-  <div class="results" style="margin-top:12px;">
-    <strong>Impacted Radars:</strong> <span id="radar-count">0</span>
+  <div class="map-layout">
+    <aside class="sidebar" aria-label="Impacted or nearby radars">
+      <div class="sidebar-header">
+        <div class="sidebar-title" id="sidebar-title">Nearby Radars</div>
+        <div class="sidebar-sub" id="sidebar-sub">Top 10 near map center</div>
+      </div>
+      <div id="radar-list" class="radar-list" role="list"></div>
+    </aside>
+    <div class="map-wrap">
+      <div id="client-map" class="map-container" role="region" aria-label="Route map"></div>
+      <div id="loading-overlay" class="loading-overlay" style="display:none;">
+        <div class="spinner"></div>
+        <div>Fetching route…</div>
+      </div>
+    </div>
   </div>
+
+  <div class="results" style="margin-top:12px; display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+    <div class="stat"><span class="label">Impacted Radars</span> <span id="radar-count" class="value">0</span></div>
+    <div class="stat"><span class="label">Distance</span> <span id="route-distance" class="value">-</span></div>
+    <div class="stat"><span class="label">Duration</span> <span id="route-duration" class="value">-</span></div>
+    <div class="stat"><span class="label">Provider</span> <span id="route-provider" class="value">-</span></div>
+    <div class="stat"><span class="label">Heading</span> <span id="route-heading" class="value">-</span></div>
+    <div class="stat"><span class="label">Zoom</span> <span id="map-zoom" class="value">-</span></div>
+    <div class="stat"><span class="label">Bearing</span> <span id="map-bearing" class="value">-</span></div>
+    <div class="stat"><span class="label">Pitch</span> <span id="map-pitch" class="value">-</span></div>
+    <div class="legend" style="margin-left:auto; display:flex; gap:12px; align-items:center;">
+      <span class="legend-item"><b>📍</b> From</span>
+      <span class="legend-item"><b>🏁</b> To</span>
+      <span class="legend-item"><b>📡</b> Radar</span>
+      <span class="legend-item"><span class="swatch sw-route"></span> Route</span>
+      <span class="legend-item"><span class="swatch sw-impact"></span> Impact Buffer</span>
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 
@@ -48,6 +76,7 @@
   window.CLIENT_CONFIG = {
     apiRadarsUrl: '/api/radars/',
     apiRouteUrl: '/api/route/',
+    apiRadarsImpactedUrl: '/api/radars/impacted/',
   };
   // Client page relies on MapLibre, MapboxDraw from base.html
 </script>
@@ -83,7 +112,43 @@
 
   .input-with-button { display: flex; gap: 6px; align-items: center; }
   .text-input { width: 100%; padding: 8px; }
-  .pick-btn { min-width: 40px; padding: 8px; line-height: 1; }
-  .pick-btn.active { background: #2da44e; border-color: #2da44e; }
+  .icon-btn { width: 36px; height: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; background: #f3f4f6; color: #111827; border: 1px solid #e5e7eb; }
+  .icon-btn:hover { background: #e5e7eb; }
+  .icon-btn.active { background: #e0f2fe; border-color: #93c5fd; }
+  .stat .label { color:#6b7280; font-size:12px; margin-right:6px; }
+  .stat .value { font-weight:600; }
+  .legend-item { color:#374151; font-size:12px; }
+  .swatch { display:inline-block; width:24px; height:6px; border-radius:6px; vertical-align:middle; margin-right:4px; }
+  .sw-route { background:#2563eb; }
+  .sw-impact { background:#ef4444; opacity:0.35; }
+  .map-wrap { position: relative; }
+  .map-wrap { flex: 1 1 auto; width: 100%; min-height: 520px; }
+  .loading-overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; background:rgba(255,255,255,0.6); z-index:5; font-weight:600; }
+  .map-layout { display:flex; gap:16px; align-items:stretch; }
+  .sidebar { width: 320px; min-width: 280px; max-width: 360px; background:#fff; border:1px solid #e5e7eb; border-radius: 12px; overflow:hidden; box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+  .sidebar-header { padding:12px 14px; border-bottom:1px solid #f0f2f5; background:#fafafa; }
+  .sidebar-title { font-weight:700; font-size:14px; }
+  .sidebar-sub { font-size:12px; color:#6b7280; margin-top:2px; }
+  .radar-list { max-height: 520px; overflow:auto; }
+  .radar-item { padding:10px 14px; border-bottom:1px solid #f3f4f6; cursor:pointer; display:flex; gap:10px; align-items:center; }
+  .radar-item:hover { background:#f9fafb; }
+  .ri-icon { font-size:18px; }
+  .ri-main { flex:1; }
+  .ri-title { font-weight:600; font-size:13px; color:#111827; }
+  .ri-meta { font-size:12px; color:#6b7280; margin-top:2px; }
+  .ri-badge { font-size:12px; font-weight:700; }
+  .ri-badge.ok { color:#059669; }
+  .ri-badge.warn { color:#ef4444; }
+  /* Map should be visible on larger screens */
+  #client-map.map-container { height: 65vh; min-height: 520px; width: 100%; }
+
+  /* Mobile tweaks: sidebar becomes horizontal scroller */
+  @media (max-width: 980px) { .map-layout { flex-direction: column; } .sidebar { width: 100%; max-width: none; } }
+  @media (max-width: 640px) { 
+    .radar-list { display: flex; overflow-x: auto; gap: 8px; padding-bottom: 8px; }
+    .radar-item { flex: 0 0 260px; border-bottom: none; border-right: 1px solid #f3f4f6; }
+  }
+  .spinner { width:28px; height:28px; border-radius:50%; border:3px solid #cbd5e1; border-top-color:#2563eb; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 {% endblock %}

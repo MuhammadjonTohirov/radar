@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 from pathlib import Path
 import os
 from decouple import config
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -27,7 +28,14 @@ SECRET_KEY = config('DJANGO_SECRET_KEY', default='django-insecure-prb7wb16_w#lof
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
 
-ALLOWED_HOSTS = config('DJANGO_ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=lambda v: [s.strip() for s in v.split(',')])
+ALLOWED_HOSTS = config(
+    'DJANGO_ALLOWED_HOSTS',
+    default='localhost,127.0.0.1,0.0.0.0',
+    cast=lambda v: [s.strip() for s in v.split(',')]
+)
+if DEBUG:
+    # In development, allow requests from any host (LAN devices, emulators)
+    ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -42,9 +50,12 @@ INSTALLED_APPS = [
     
     # Third party apps
     'rest_framework',
+    'rest_framework.authtoken',
     'corsheaders',
     'django_filters',
     'django_extensions',
+    'drf_spectacular',
+    'drf_spectacular_sidecar',
     
     # Local apps
     'radars',
@@ -95,49 +106,40 @@ TEMPLATES = [
 WSGI_APPLICATION = 'radar_project.wsgi.application'
 
 
-# Database
+# Database — force SQLite for local/dev
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
-
-DATABASE_URL = config('DATABASE_URL', default='sqlite:///db.sqlite3')
-
-if DATABASE_URL.startswith('sqlite'):
-    if HAS_GIS:
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.contrib.gis.db.backends.spatialite',
-                'NAME': BASE_DIR / 'db.sqlite3',
-            }
+if HAS_GIS:
+    # SpatiaLite can be enabled later if desired; default to plain SQLite
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
         }
-    else:
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.db.backends.sqlite3',
-                'NAME': BASE_DIR / 'db.sqlite3',
-            }
-        }
+    }
 else:
-    if HAS_GIS:
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.contrib.gis.db.backends.postgis',
-                'NAME': config('DB_NAME', default='radar_db'),
-                'USER': config('DB_USER', default='radar_user'),
-                'PASSWORD': config('DB_PASSWORD', default='radar_pass_dev'),
-                'HOST': config('DB_HOST', default='localhost'),
-                'PORT': config('DB_PORT', default='5432'),
-            }
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
         }
-    else:
-        DATABASES = {
-            'default': {
-                'ENGINE': 'django.db.backends.postgresql',
-                'NAME': config('DB_NAME', default='radar_db'),
-                'USER': config('DB_USER', default='radar_user'),
-                'PASSWORD': config('DB_PASSWORD', default='radar_pass_dev'),
-                'HOST': config('DB_HOST', default='localhost'),
-                'PORT': config('DB_PORT', default='5432'),
-            }
-        }
+    }
+
+# -----------------------------------------------------------------------------
+# Routing configuration
+# -----------------------------------------------------------------------------
+# Prefer direct PostgreSQL pgRouting instead of Docker services when enabled.
+ROUTING_USE_PGROUTING = config('ROUTING_USE_PGROUTING', cast=bool, default=False)
+ROUTING_PG_SCHEMA = config('ROUTING_PG_SCHEMA', default='public')
+ROUTING_SNAP_TOLERANCE_M = config('ROUTING_SNAP_TOLERANCE_M', cast=int, default=2000)
+
+# Optional external/custom routing service (kept as fallback)
+ROUTING_PROVIDER = config('ROUTING_PROVIDER', default='fallback')
+ROUTING_BASE_URL = config('ROUTING_BASE_URL', default='')
+
+# External OSRM service (optional, remote)
+REMOTE_OSRM_BASE_URL = config('REMOTE_OSRM_BASE_URL', default='http://87.237.239.18:3000')
+REMOTE_OSRM_DEFAULT_PROFILE = config('REMOTE_OSRM_DEFAULT_PROFILE', default='driving')
+CUSTOM_ROUTING_URL = config('CUSTOM_ROUTING_URL', default='')
 
 
 # Password validation
@@ -183,12 +185,18 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # REST Framework configuration
 REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 100,
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
@@ -197,13 +205,25 @@ REST_FRAMEWORK = {
 }
 
 # CORS settings
-CORS_ALLOW_ALL_ORIGINS = DEBUG
-CORS_ALLOWED_ORIGINS = [
+CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=DEBUG, cast=bool)
+# Additional allowlist for when CORS_ALLOW_ALL_ORIGINS is False
+_cors_env = config('DJANGO_CORS_ORIGINS', default='', cast=str)
+_cors_extra = [s.strip() for s in _cors_env.split(',') if s.strip()]
+CORS_ALLOWED_ORIGINS = list({
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:8080",
     "http://127.0.0.1:8080",
-]
+    *(_cors_extra or []),
+})
+CORS_ALLOW_CREDENTIALS = True
+
+# Optional CSRF trusted origins (useful when accessing via LAN IP in browser)
+CSRF_TRUSTED_ORIGINS = config(
+    'DJANGO_CSRF_TRUSTED_ORIGINS',
+    default='',
+    cast=lambda v: [s.strip() for s in v.split(',') if s.strip()]
+) or []
 
 # Media files
 MEDIA_URL = '/media/'
@@ -221,6 +241,14 @@ LOGIN_URL = '/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/login/'
 
+# drf-spectacular OpenAPI settings
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Radar2 API',
+    'DESCRIPTION': 'API for radar data, routing, and analytics',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+}
+
 # Routing settings
 # Custom Radar2 routing service (preferred)
 CUSTOM_ROUTING_URL = config('CUSTOM_ROUTING_URL', default='http://localhost:5002')
@@ -235,3 +263,12 @@ os.environ.setdefault('CUSTOM_ROUTING_URL', 'http://localhost:5002')
 #   ROUTING_BASE_URL=http://<host>:<port>
 ROUTING_PROVIDER = config('ROUTING_PROVIDER', default='fallback')
 ROUTING_BASE_URL = config('ROUTING_BASE_URL', default='')
+
+# Simple JWT settings
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
+    'ROTATE_REFRESH_TOKENS': False,
+    'BLACKLIST_AFTER_ROTATION': False,
+    'UPDATE_LAST_LOGIN': False,
+}

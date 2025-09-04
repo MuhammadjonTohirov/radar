@@ -6,10 +6,8 @@ ENV PYTHONUNBUFFERED=1
 
 # Install system dependencies
 RUN apk add --no-cache \
-        postgresql-client \
         gcc \
         musl-dev \
-        postgresql-dev \
         python3-dev \
         libffi-dev \
         build-base

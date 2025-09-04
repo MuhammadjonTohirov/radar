@@ -22,6 +22,34 @@
                 "PYTHONPATH": "${workspaceFolder}/server"
             },
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Server-Map (Routing Service)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/server-map/app.py",
+            "python": "${workspaceFolder}/server-map/venv/bin/python",
+            "cwd": "${workspaceFolder}/server-map",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/server-map",
+                "FLASK_ENV": "development",
+                "FLASK_DEBUG": "1"
+            },
+            "console": "integratedTerminal",
+            "autoStartBrowser": false
+        },
+        {
+            "name": "Mobile Radar (Flutter)",
+            "type": "dart",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/mobile-radar",
+            "program": "lib/main.dart",
+            "flutterMode": "debug",
+            // For Android emulator, backend at host is 10.0.2.2
+            // Override for iOS simulator to 127.0.0.1 as needed
+            "toolArgs": [
+                "--dart-define=API_BASE_URL=http://192.168.1.124:9999/api/"
+            ]
         }
     ]
 }

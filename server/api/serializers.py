@@ -76,6 +76,53 @@ class RadarListSerializer(serializers.ModelSerializer):
         ]
 
 
+class RadarDeltaSerializer(serializers.ModelSerializer):
+    """
+    Lightweight serializer for mobile delta sync within a radius.
+    Always emits a stable shape regardless of GIS availability:
+      - center: { latitude, longitude }
+      - sector: GeoJSON Polygon (if available), else null
+    """
+    center = serializers.SerializerMethodField()
+    sector = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Radar
+        fields = [
+            'id', 'type', 'speed_limit', 'verified', 'active',
+            'created_at', 'updated_at', 'center', 'sector'
+        ]
+
+    def get_center(self, obj):
+        if getattr(settings, 'HAS_GIS', False) and hasattr(obj, 'center') and obj.center:
+            try:
+                return {
+                    'latitude': obj.center.y,
+                    'longitude': obj.center.x,
+                }
+            except Exception:
+                return None
+        # Non-GIS
+        lat = getattr(obj, 'center_lat', None)
+        lon = getattr(obj, 'center_lon', None)
+        if lat is None or lon is None:
+            return None
+        return {'latitude': lat, 'longitude': lon}
+
+    def get_sector(self, obj):
+        if getattr(settings, 'HAS_GIS', False) and hasattr(obj, 'sector') and obj.sector:
+            try:
+                # Emit GeoJSON polygon
+                return {
+                    'type': 'Polygon',
+                    'coordinates': list(obj.sector.coords)
+                }
+            except Exception:
+                return None
+        # Non-GIS
+        return getattr(obj, 'sector_json', None)
+
+
 class RadarReportSerializer(serializers.ModelSerializer):
     """
     Serializer for radar reports

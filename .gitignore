@@ -57,3 +57,12 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Large OSM files
+*.osm.xml
+*.osm.pbf
+*.osm
+
+# Database files
+*.db
+radars.db
