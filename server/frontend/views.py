@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.conf import settings
-from radars.models import Radar
+from radars.models import Radar, RadarCategory
 from .forms import RadarForm
 import json
 
@@ -50,10 +50,10 @@ def radar_list(request):
             Q(id__icontains=search)
         )
     
-    # Filter by type
-    radar_type = request.GET.get('type')
-    if radar_type:
-        radars = radars.filter(type=radar_type)
+    # Filter by category code
+    cat_code = request.GET.get('category')
+    if cat_code:
+        radars = radars.filter(category__code=cat_code)
     
     # Filter by verification status
     verified = request.GET.get('verified')
@@ -72,7 +72,7 @@ def radar_list(request):
     
     context = {
         'radars': page_obj,
-        'radar_types': Radar.TYPE_CHOICES,
+        'categories': RadarCategory.objects.filter(is_active=True).order_by('order', 'name'),
     }
     
     return render(request, 'frontend/radar_list.html', context)

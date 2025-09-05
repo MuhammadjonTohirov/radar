@@ -1,6 +1,6 @@
 from django import forms
 from django.conf import settings
-from radars.models import Radar
+from radars.models import Radar, RadarCategory
 import json
 
 
@@ -8,12 +8,12 @@ class RadarForm(forms.ModelForm):
     class Meta:
         model = Radar
         if getattr(settings, 'HAS_GIS', False):
-            fields = ['type', 'sector', 'speed_limit', 'notes']
+            fields = ['category', 'sector', 'speed_limit', 'notes']
         else:
-            fields = ['type', 'sector_json', 'center_lat', 'center_lon', 'speed_limit', 'notes']
+            fields = ['category', 'sector_json', 'center_lat', 'center_lon', 'speed_limit', 'notes']
         
         widgets = {
-            'type': forms.Select(attrs={'class': 'form-control'}),
+            'category': forms.Select(attrs={'class': 'form-control'}),
             'speed_limit': forms.NumberInput(attrs={'class': 'form-control', 'min': '10', 'max': '200'}),
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 4}),
         }
@@ -87,3 +87,11 @@ class RadarForm(forms.ModelForm):
                 raise forms.ValidationError('Center coordinates are required.')
         
         return cleaned_data
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Limit category choices to active ones, ordered
+        try:
+            self.fields['category'].queryset = RadarCategory.objects.filter(is_active=True).order_by('order', 'name')
+        except Exception:
+            pass

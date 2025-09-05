@@ -18,8 +18,8 @@
                 <td>{{ radar.id }}</td>
             </tr>
             <tr>
-                <td><strong>Type:</strong></td>
-                <td>{{ radar.get_type_display }}</td>
+                <td><strong>Category:</strong></td>
+                <td>{% if radar.category %}{{ radar.category.name }}{% else %}-{% endif %}</td>
             </tr>
             <tr>
                 <td><strong>Location:</strong></td>

@@ -81,7 +81,7 @@ class RadarViewSet(viewsets.ModelViewSet):
         if not self.request.user.is_authenticated:
             queryset = queryset.filter(verified=True)
         
-        return queryset.select_related('created_by', 'verified_by')
+        return queryset.select_related('created_by', 'verified_by', 'category')
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -423,10 +423,13 @@ def _compute_impacted_radars(request, route_feature, buffer_m: float) -> list[di
             if route_buf.intersects(poly_xy):
                 impacted.append({
                     'id': r.id,
-                    'type': r.type,
+                    'category_code': getattr(r.category, 'code', None),
+                    'type': getattr(r.category, 'code', None),
                     'speed_limit': r.speed_limit,
                     'verified': r.verified,
                     'active': r.active,
+                    'icon_url': getattr(r, 'icon_url', None),
+                    'icon_color': getattr(r, 'resolved_icon_color', None),
                     'center': {
                         'latitude': getattr(r, 'center_lat', None),
                         'longitude': getattr(r, 'center_lon', None),
@@ -498,7 +501,7 @@ def radars_nearby_view(request):
         return 2 * R * math.asin(math.sqrt(a))
 
     items = []
-    for r in qs.select_related('created_by', 'verified_by'):
+    for r in qs.select_related('created_by', 'verified_by', 'category'):
         lat = getattr(r, 'center_lat', None)
         lon = getattr(r, 'center_lon', None)
         if lat is None or lon is None:
@@ -507,10 +510,13 @@ def radars_nearby_view(request):
         if max_distance is None or d <= max_distance:
             items.append({
                 'id': r.id,
-                'type': r.type,
+                'category_code': getattr(r.category, 'code', None),
+                'type': getattr(r.category, 'code', None),
                 'speed_limit': r.speed_limit,
                 'verified': r.verified,
                 'active': r.active,
+                'icon_url': getattr(r, 'icon_url', None),
+                'icon_color': getattr(r, 'resolved_icon_color', None),
                 'center': {'latitude': lat, 'longitude': lon},
                 'distance_m': round(d, 2),
             })
@@ -581,7 +587,8 @@ def radars_updates_view(request):
         full_qs = base_qs
         latest_dt = full_qs.aggregate(m=Max('updated_at'))['m']
         if since_dt is not None:
-            full_qs = full_qs.filter(updated_at__gtsince_dt)
+            # Return only items updated since the provided version
+            full_qs = full_qs.filter(updated_at__gt=since_dt)
         data = RadarDeltaSerializer(full_qs.order_by('id'), many=True).data
         latest_version_str = version_param if latest_dt is None else latest_dt.astimezone(dt_timezone.utc).isoformat().replace('+00:00', 'Z')
         return Response({'version': latest_version_str, 'count': len(data), 'radars': data})

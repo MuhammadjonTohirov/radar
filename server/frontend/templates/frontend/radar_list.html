@@ -15,11 +15,11 @@
         <div class="search-filters" style="float: right;">
             <form method="get" style="display: inline-block;">
                 <input type="text" name="search" placeholder="Search radars..." value="{{ request.GET.search }}" style="padding: 8px;">
-                <select name="type" style="padding: 8px;">
-                    <option value="">All Types</option>
-                    {% for type_key, type_label in radar_types %}
-                    <option value="{{ type_key }}" {% if request.GET.type == type_key %}selected{% endif %}>
-                        {{ type_label }}
+                <select name="category" style="padding: 8px;">
+                    <option value="">All Categories</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.code }}" {% if request.GET.category == cat.code %}selected{% endif %}>
+                        {{ cat.name }}
                     </option>
                     {% endfor %}
                 </select>
@@ -46,7 +46,7 @@
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>Type</th>
+                    <th>Category</th>
                     <th>Location</th>
                     <th>Speed Limit</th>
                     <th>Status</th>
@@ -58,11 +58,7 @@
                 {% for radar in radars %}
                 <tr>
                     <td>{{ radar.id }}</td>
-                    <td>
-                        <span class="radar-type-badge radar-type-{{ radar.type }}">
-                            {{ radar.get_type_display }}
-                        </span>
-                    </td>
+                    <td>{% if radar.category %}{{ radar.category.name }}{% else %}-{% endif %}</td>
                     <td>{{ radar.coordinates_display }}</td>
                     <td>
                         {% if radar.speed_limit %}
@@ -104,8 +100,8 @@
     <div class="pagination">
         <span class="step-links">
             {% if radars.has_previous %}
-                <a href="?page=1{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.verified %}&verified={{ request.GET.verified }}{% endif %}">&laquo; first</a>
-                <a href="?page={{ radars.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.verified %}&verified={{ request.GET.verified }}{% endif %}">previous</a>
+                <a href="?page=1{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.verified %}&verified={{ request.GET.verified }}{% endif %}">&laquo; first</a>
+                <a href="?page={{ radars.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.verified %}&verified={{ request.GET.verified }}{% endif %}">previous</a>
             {% endif %}
 
             <span class="current">
@@ -113,8 +109,8 @@
             </span>
 
             {% if radars.has_next %}
-                <a href="?page={{ radars.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.verified %}&verified={{ request.GET.verified }}{% endif %}">next</a>
-                <a href="?page={{ radars.paginator.num_pages }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.verified %}&verified={{ request.GET.verified }}{% endif %}">last &raquo;</a>
+                <a href="?page={{ radars.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.verified %}&verified={{ request.GET.verified }}{% endif %}">next</a>
+                <a href="?page={{ radars.paginator.num_pages }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.category %}&category={{ request.GET.category }}{% endif %}{% if request.GET.verified %}&verified={{ request.GET.verified }}{% endif %}">last &raquo;</a>
             {% endif %}
         </span>
     </div>

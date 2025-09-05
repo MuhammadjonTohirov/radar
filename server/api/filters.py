@@ -6,18 +6,17 @@ class RadarFilter(django_filters.FilterSet):
     """
     Filter set for Radar model with geographic and metadata filtering
     """
-    # Type filtering
-    type = django_filters.MultipleChoiceFilter(
-        choices=Radar.TYPE_CHOICES,
-        help_text="Filter by radar type(s)"
-    )
-    
     # Status filtering
     verified = django_filters.BooleanFilter(
         help_text="Filter by verification status"
     )
     active = django_filters.BooleanFilter(
         help_text="Filter by active status"
+    )
+
+    # Category
+    category = django_filters.CharFilter(
+        field_name='category__code', lookup_expr='iexact', help_text='Filter by category code'
     )
     
     # Speed limit filtering
@@ -61,7 +60,7 @@ class RadarFilter(django_filters.FilterSet):
     class Meta:
         model = Radar
         fields = [
-            'type', 'verified', 'active',
+            'verified', 'active', 'category',
             'speed_limit_min', 'speed_limit_max',
             'created_after', 'created_before',
             'min_alerts', 'recently_detected'
@@ -86,10 +85,8 @@ class RadarReportFilter(django_filters.FilterSet):
         help_text="Filter by report type(s)"
     )
     
-    radar_type = django_filters.ChoiceFilter(
-        field_name='radar__type',
-        choices=Radar.TYPE_CHOICES,
-        help_text="Filter by radar type"
+    radar_category = django_filters.CharFilter(
+        field_name='radar__category__code', lookup_expr='iexact', help_text='Filter by radar category code'
     )
     
     created_after = django_filters.DateTimeFilter(
@@ -103,17 +100,15 @@ class RadarReportFilter(django_filters.FilterSet):
     
     class Meta:
         model = RadarReport
-        fields = ['report_type', 'radar_type', 'created_after', 'created_before']
+        fields = ['report_type', 'radar_category', 'created_after', 'created_before']
 
 
 class DetectionLogFilter(django_filters.FilterSet):
     """
     Filter set for DetectionLog model
     """
-    radar_type = django_filters.ChoiceFilter(
-        field_name='radar__type',
-        choices=Radar.TYPE_CHOICES,
-        help_text="Filter by radar type"
+    radar_category = django_filters.CharFilter(
+        field_name='radar__category__code', lookup_expr='iexact', help_text='Filter by radar category code'
     )
     
     speed_min = django_filters.NumberFilter(
@@ -153,7 +148,7 @@ class DetectionLogFilter(django_filters.FilterSet):
     class Meta:
         model = DetectionLog
         fields = [
-            'radar_type', 'speed_min', 'speed_max',
+            'radar_category', 'speed_min', 'speed_max',
             'detected_after', 'detected_before',
             'today', 'this_week', 'this_month'
         ]

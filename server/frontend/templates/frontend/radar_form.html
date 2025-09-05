@@ -17,11 +17,11 @@
             
             <div class="form-row">
                 <div>
-                    <label for="{{ form.type.id_for_label }}" class="required">Radar Type:</label>
-                    {{ form.type }}
-                    {% if form.type.errors %}
+                    <label for="{{ form.category.id_for_label }}" class="required">Radar Category:</label>
+                    {{ form.category }}
+                    {% if form.category.errors %}
                         <ul class="errorlist">
-                            {% for error in form.type.errors %}
+                            {% for error in form.category.errors %}
                             <li>{{ error }}</li>
                             {% endfor %}
                         </ul>

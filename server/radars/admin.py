@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 from django.conf import settings
-from .models import Radar, RadarReport, DetectionLog
+from .models import Radar, RadarReport, DetectionLog, RadarCategory
 
 # Use GIS admin if available, otherwise use regular admin
 if getattr(settings, 'HAS_GIS', False):
@@ -17,12 +17,11 @@ else:
 @admin.register(Radar)
 class RadarAdmin(BaseRadarAdmin):
     list_display = [
-        'id', 'type', 'coordinates_display', 'speed_limit',
+        'id', 'category', 'coordinates_display', 'speed_limit',
         'verified', 'active', 'alert_count', 'created_at'
     ]
     list_filter = [
-        'type', 'verified', 'active', 'created_at',
-        'speed_limit'
+        'category', 'verified', 'active', 'created_at', 'speed_limit'
     ]
     search_fields = ['notes', 'id']
     def get_readonly_fields(self, request, obj=None):
@@ -33,9 +32,9 @@ class RadarAdmin(BaseRadarAdmin):
     
     def get_fieldsets(self, request, obj=None):
         if getattr(settings, 'HAS_GIS', False):
-            radar_fields = ['type', 'sector', 'center', 'coordinates_display']
+            radar_fields = ['category', 'sector', 'center', 'coordinates_display']
         else:
-            radar_fields = ['type', 'sector_json', 'center_lat', 'center_lon', 'coordinates_display']
+            radar_fields = ['category', 'sector_json', 'center_lat', 'center_lon', 'coordinates_display']
         
         return [
             ('Radar Information', {
@@ -43,6 +42,9 @@ class RadarAdmin(BaseRadarAdmin):
             }),
             ('Traffic Details', {
                 'fields': ['speed_limit', 'notes']
+            }),
+            ('Presentation', {
+                'fields': ['icon', 'icon_color']
             }),
             ('Status', {
                 'fields': ['verified', 'active']
@@ -92,6 +94,19 @@ class RadarAdmin(BaseRadarAdmin):
         super().save_model(request, obj, form, change)
 
 
+@admin.register(RadarCategory)
+class RadarCategoryAdmin(admin.ModelAdmin):
+    list_display = ['id', 'name', 'code', 'color', 'order', 'is_active', 'created_at']
+    list_filter = ['is_active']
+    search_fields = ['name', 'code']
+    readonly_fields = ['created_at', 'updated_at']
+    fieldsets = [
+        (None, {'fields': ['name', 'code', 'groups', 'order', 'is_active']}),
+        ('Presentation', {'fields': ['color', 'icon']}),
+        ('Timestamps', {'fields': ['created_at', 'updated_at'], 'classes': ['collapse']}),
+    ]
+
+
 @admin.register(RadarReport)
 class RadarReportAdmin(admin.ModelAdmin):
     list_display = [
@@ -122,7 +137,7 @@ class DetectionLogAdmin(admin.ModelAdmin):
     list_display = [
         'id', 'radar_link', 'device_id', 'speed', 'detected_at'
     ]
-    list_filter = ['detected_at', 'radar__type']
+    list_filter = ['detected_at', 'radar__category']
     search_fields = ['device_id', 'radar__id']
     def get_readonly_fields(self, request, obj=None):
         readonly = ['detected_at', 'device_id', 'radar']

@@ -13,7 +13,7 @@
   let toMarker = null;
   let routeFeatureId = null;
   let radarMarkers = [];
-  const radars = []; // {id, type, center: [lon,lat], speed_limit, verified, marker, el, sector}
+  const radars = []; // {id, type(category_code), center, speed_limit, verified, marker, el, sector, icon_url, icon_color}
   let polygonsInitialized = false;
   let pickMode = null; // 'from' | 'to' | null
   let apiRouteFeature = null; // Feature from routing API
@@ -194,11 +194,13 @@
         }
         results.push({
           id: item.id,
-          type: item.type,
+          type: item.category_code || item.type || null,
           speed_limit: item.speed_limit,
           verified: item.verified,
           center,
-          sector
+          sector,
+          icon_url: item.icon_url || null,
+          icon_color: item.icon_color || null,
         });
       }
       if (!payload.next) break;
@@ -211,14 +213,24 @@
   function addRadarToMap(radar) {
     radars.push(radar);
     if (!radar.center) return;
-    const el = document.createElement('div');
-    el.className = 'radar-marker';
-    el.textContent = '📡';
-    el.title = 'Radar';
-    el.style.cssText = 'font-size:18px; line-height:1; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4)); transition: opacity 0.2s;';
+    let el;
+    if (radar.icon_url) {
+      el = document.createElement('img');
+      el.src = radar.icon_url;
+      el.alt = 'radar';
+      el.style.cssText = 'width:20px;height:20px;object-fit:contain;display:block;';
+      el.className = 'radar-marker';
+      el.title = 'Radar';
+    } else {
+      el = document.createElement('span');
+      el.textContent = '📹';
+      el.className = 'radar-marker';
+      el.title = 'Radar';
+      el.style.cssText = 'font-size:18px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4));';
+    }
     const m = new maplibregl.Marker({ element: el })
       .setLngLat(radar.center)
-      .setPopup(new maplibregl.Popup().setHTML(`<div><strong>Radar #${radar.id}</strong><br>Type: ${radar.type}${radar.speed_limit ? `<br>Speed: ${radar.speed_limit} km/h` : ''}</div>`))
+      .setPopup(new maplibregl.Popup().setHTML(`<div><strong>Radar #${radar.id}</strong><br>Category: ${typeLabel(radar.type)}${radar.speed_limit ? `<br>Speed: ${radar.speed_limit} km/h` : ''}</div>`))
       .addTo(map);
     radar.marker = m;
     radar.el = el;
@@ -451,7 +463,7 @@
         if (!Number.isNaN(lon) && !Number.isNaN(lat)) center = [lon, lat];
       }
       if (!r) {
-        r = { id: item.id, type: item.type, speed_limit: item.speed_limit, verified: item.verified, center };
+        r = { id: item.id, type: item.type || item.category_code || null, speed_limit: item.speed_limit, verified: item.verified, center, icon_url: item.icon_url || null, icon_color: item.icon_color || null };
         addRadarToMap(r);
         byId.set(r.id, r);
       }
@@ -755,7 +767,9 @@
       speed_limit: x.r.speed_limit,
       verified: x.r.verified,
       center: { longitude: x.r.center[0], latitude: x.r.center[1] },
-      distance_km: x.d
+      distance_km: x.d,
+      icon_url: x.r.icon_url || null,
+      icon_color: x.r.icon_color || null,
     }));
     sidebarMode = 'nearby';
     const titleEl = document.getElementById('sidebar-title');
@@ -776,8 +790,9 @@
     items.forEach(item => {
       const el = document.createElement('div');
       el.className = 'radar-item';
+      const iconHtml = item.icon_url ? `<img src=\"${item.icon_url}\" alt=\"icon\" style=\\\"width:18px;height:18px;object-fit:contain;display:block;\\\"/>` : '📹';
       el.innerHTML = `
-        <div class=\"ri-icon\">📡</div>
+        <div class=\"ri-icon\">${iconHtml}</div>
         <div class=\"ri-main\">
           <div class=\"ri-title\">${typeLabel(item.type)} ${item.speed_limit ? `· ${item.speed_limit} km/h` : ''}</div>
           <div class=\"ri-meta\">${item.center ? `${Number(item.center.latitude).toFixed(6)}, ${Number(item.center.longitude).toFixed(6)}` : ''}

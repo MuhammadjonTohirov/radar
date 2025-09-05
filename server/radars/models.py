@@ -9,20 +9,37 @@ else:
     from django.db import models
 
 
-class Radar(models.Model):
-    TYPE_CHOICES = [
-        ("fixed_speed_camera", "Fixed Speed Camera"),
-        ("mobile_tripod", "Mobile Speed Camera"),
-        ("red_light", "Red Light Camera"),
-        ("average_speed", "Average Speed Camera"),
-        ("section_control", "Section Control"),
-        ("bus_lane", "Bus Lane Camera"),
-        ("other", "Other")
-    ]
-    
+class RadarCategory(models.Model):
+    """
+    Category for radars with presentation details.
+    Stores icon and color that clients can use for display.
+    """
+    code = models.SlugField(max_length=50, unique=True, help_text="Stable code identifier (e.g. speed_control)")
+    name = models.CharField(max_length=100)
+    # Multiple group keys (e.g., ["stationary", "safe"]) for client-side grouping
+    groups = models.JSONField(default=list, help_text="List of group keys (strings)")
+    color = models.CharField(max_length=9, default="#2ECC71", help_text="Hex color, e.g. #2ECC71")
+    icon = models.ImageField(upload_to='category_icons/', null=True, blank=True)
+    order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
 
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order", "name"]
+        verbose_name_plural = "Radar categories"
+        indexes = [
+            models.Index(fields=["code"]),
+            models.Index(fields=["is_active"]),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
+class Radar(models.Model):
     # Core fields
-    type = models.CharField(max_length=32, choices=TYPE_CHOICES, default="fixed_speed_camera")
     
     # Use GIS fields if available, otherwise use JSON/coordinate fields
     if getattr(settings, 'HAS_GIS', False):
@@ -33,11 +50,23 @@ class Radar(models.Model):
         center_lat = models.FloatField(help_text="Center latitude")
         center_lon = models.FloatField(help_text="Center longitude")
     
+    # Relations
+    category = models.ForeignKey(
+        'radars.RadarCategory',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='radars'
+    )
+
     # Metadata
     speed_limit = models.IntegerField(null=True, blank=True, help_text="Speed limit in km/h")
     notes = models.TextField(blank=True, help_text="Additional notes about this radar")
     verified = models.BooleanField(default=False, help_text="Whether this radar has been verified")
     active = models.BooleanField(default=True, help_text="Whether this radar is currently active")
+    # Optional presentation overrides (fallback to category when not provided)
+    icon = models.ImageField(upload_to='radar_icons/', null=True, blank=True, help_text="Optional icon overriding category icon")
+    icon_color = models.CharField(max_length=9, null=True, blank=True, help_text="Optional hex color overriding category color")
     
     # Audit fields
     created_by = models.ForeignKey(
@@ -67,14 +96,19 @@ class Radar(models.Model):
     class Meta:
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['type']),
+            models.Index(fields=['category']),
             models.Index(fields=['verified']),
             models.Index(fields=['active']),
             models.Index(fields=['created_at']),
         ]
 
     def __str__(self):
-        return f"{self.get_type_display()} - {self.id}"
+        try:
+            if self.category:
+                return f"{self.category.name} - {self.id}"
+        except Exception:
+            pass
+        return f"Radar {self.id}"
 
     def save(self, *args, **kwargs):
         # Note: center_lat and center_lon should be set from the radar pin location,
@@ -107,6 +141,33 @@ class Radar(models.Model):
                 self.center_lat is not None and self.center_lon is not None):
                 return f"({self.center_lat:.6f}, {self.center_lon:.6f})"
         return "No coordinates"
+
+    # ------------------------------------------------------------------
+    # Presentation helpers
+    # ------------------------------------------------------------------
+    @property
+    def icon_url(self):
+        """Return direct icon URL (radar override first, then category)."""
+        try:
+            if self.icon:
+                return self.icon.url
+        except Exception:
+            pass
+        try:
+            if self.category and self.category.icon:
+                return self.category.icon.url
+        except Exception:
+            pass
+        return None
+
+    @property
+    def resolved_icon_color(self):
+        """Return radar icon_color override or fall back to category color."""
+        if self.icon_color:
+            return self.icon_color
+        if self.category:
+            return self.category.color
+        return None
 
 
 class RadarReport(models.Model):

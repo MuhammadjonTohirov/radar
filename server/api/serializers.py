@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.conf import settings
-from radars.models import Radar, RadarReport, DetectionLog
+from radars.models import Radar, RadarReport, DetectionLog, RadarCategory
 
 # Import GIS serializer only if available
 if getattr(settings, 'HAS_GIS', False):
@@ -21,21 +21,28 @@ class RadarSerializer(BaseRadarSerializer):
     Radar serializer with optional GeoJSON support
     """
     coordinates_display = serializers.ReadOnlyField()
+    category_id = serializers.PrimaryKeyRelatedField(source='category', read_only=True)
+    category_code = serializers.SerializerMethodField()
+    category_name = serializers.SerializerMethodField()
+    icon_url = serializers.SerializerMethodField()
+    icon_color = serializers.SerializerMethodField()
+    category_groups = serializers.SerializerMethodField()
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
     verified_by_username = serializers.CharField(source='verified_by.username', read_only=True)
     
     class Meta:
         model = Radar
         fields = [
-            'id', 'type', 'speed_limit', 'notes', 
+            'id', 'speed_limit', 'notes', 
             'verified', 'active', 'alert_count', 'last_detected',
             'created_at', 'updated_at', 'verified_at',
-            'coordinates_display', 'created_by_username', 'verified_by_username'
+            'coordinates_display', 'created_by_username', 'verified_by_username',
+            'category_id', 'category_code', 'category_name', 'category_groups', 'icon_url', 'icon_color'
         ]
         read_only_fields = [
             'alert_count', 'last_detected', 'created_at', 'updated_at', 
             'verified_at', 'coordinates_display', 'created_by_username',
-            'verified_by_username'
+            'verified_by_username', 'category_id', 'category_code', 'category_name', 'category_groups', 'icon_url', 'icon_color'
         ]
         
         # Add geo_field only for GIS serializer
@@ -61,19 +68,66 @@ class RadarSerializer(BaseRadarSerializer):
         
         return representation
 
+    def get_category_code(self, obj):
+        try:
+            return obj.category.code if obj.category else None
+        except Exception:
+            return None
+
+    def get_category_name(self, obj):
+        try:
+            return obj.category.name if obj.category else None
+        except Exception:
+            return None
+
+    def get_icon_url(self, obj):
+        return getattr(obj, 'icon_url', None)
+
+    def get_icon_color(self, obj):
+        return getattr(obj, 'resolved_icon_color', None)
+
+    def get_category_groups(self, obj):
+        try:
+            return list(obj.category.groups or []) if obj.category else []
+        except Exception:
+            return []
+
 
 class RadarListSerializer(serializers.ModelSerializer):
     """
     Simplified serializer for listing radars without geometry
     """
     coordinates_display = serializers.ReadOnlyField()
+    category_code = serializers.SerializerMethodField()
+    icon_url = serializers.SerializerMethodField()
+    icon_color = serializers.SerializerMethodField()
+    category_groups = serializers.SerializerMethodField()
     
     class Meta:
         model = Radar
         fields = [
-            'id', 'type', 'speed_limit', 'verified', 
-            'active', 'alert_count', 'coordinates_display', 'created_at'
+            'id', 'speed_limit', 'verified', 
+            'active', 'alert_count', 'coordinates_display', 'created_at',
+            'category_code', 'category_groups', 'icon_url', 'icon_color'
         ]
+
+    def get_category_code(self, obj):
+        try:
+            return obj.category.code if obj.category else None
+        except Exception:
+            return None
+
+    def get_icon_url(self, obj):
+        return getattr(obj, 'icon_url', None)
+
+    def get_icon_color(self, obj):
+        return getattr(obj, 'resolved_icon_color', None)
+
+    def get_category_groups(self, obj):
+        try:
+            return list(obj.category.groups or []) if obj.category else []
+        except Exception:
+            return []
 
 
 class RadarDeltaSerializer(serializers.ModelSerializer):
@@ -85,12 +139,17 @@ class RadarDeltaSerializer(serializers.ModelSerializer):
     """
     center = serializers.SerializerMethodField()
     sector = serializers.SerializerMethodField()
+    category_code = serializers.SerializerMethodField()
+    icon_url = serializers.SerializerMethodField()
+    icon_color = serializers.SerializerMethodField()
+    category_groups = serializers.SerializerMethodField()
 
     class Meta:
         model = Radar
         fields = [
-            'id', 'type', 'speed_limit', 'verified', 'active',
-            'created_at', 'updated_at', 'center', 'sector'
+            'id', 'speed_limit', 'verified', 'active',
+            'created_at', 'updated_at', 'center', 'sector',
+            'category_code', 'category_groups', 'icon_url', 'icon_color'
         ]
 
     def get_center(self, obj):
@@ -121,6 +180,24 @@ class RadarDeltaSerializer(serializers.ModelSerializer):
                 return None
         # Non-GIS
         return getattr(obj, 'sector_json', None)
+
+    def get_category_code(self, obj):
+        try:
+            return obj.category.code if obj.category else None
+        except Exception:
+            return None
+
+    def get_icon_url(self, obj):
+        return getattr(obj, 'icon_url', None)
+
+    def get_icon_color(self, obj):
+        return getattr(obj, 'resolved_icon_color', None)
+
+    def get_category_groups(self, obj):
+        try:
+            return list(obj.category.groups or []) if obj.category else []
+        except Exception:
+            return []
 
 
 class RadarReportSerializer(serializers.ModelSerializer):
@@ -167,7 +244,7 @@ class RadarCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Radar
         fields = [
-            'type', 'sector', 'speed_limit', 'notes'
+            'category', 'sector', 'speed_limit', 'notes'
         ]
     
     def validate_sector(self, value):
