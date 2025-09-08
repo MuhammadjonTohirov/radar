@@ -524,6 +524,24 @@ def radars_nearby_view(request):
     items.sort(key=lambda x: x['distance_m'])
     return Response({'results': items[:limit]})
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticatedOrReadOnly])
+def radars_categories_view(request):
+    """
+    Return list of radar categories with code, name, icon, and color.
+    """
+    from radars.models import RadarCategory
+    categories = RadarCategory.objects.all().order_by('name')
+    data = []
+    for cat in categories:
+        data.append({
+            'code': cat.code,
+            'name': cat.name,
+            'icon': cat.icon,
+            'icon_color': cat.color,
+        })
+    return Response({'categories': data})
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticatedOrReadOnly])
@@ -619,57 +637,57 @@ def radars_updates_view(request):
             'radars': data,
         })
 
-    # Non-GIS path: coarse bbox + haversine filter
-    import math
-    R = 6371000.0
-    cos0 = math.cos(math.radians(lat)) or 1e-6
-    deg_lat = (radius_km * 1000.0) / 111000.0
-    deg_lon = (radius_km * 1000.0) / (111000.0 * cos0)
+        # Non-GIS path: coarse bbox + haversine filter
+        # import math
+        # R = 6371000.0
+        # cos0 = math.cos(math.radians(lat)) or 1e-6
+        # deg_lat = (radius_km * 1000.0) / 111000.0
+        # deg_lon = (radius_km * 1000.0) / (111000.0 * cos0)
 
-    candidates = base_qs.filter(
-        center_lat__gte=lat - deg_lat,
-        center_lat__lte=lat + deg_lat,
-        center_lon__gte=lon - deg_lon,
-        center_lon__lte=lon + deg_lon,
-    )
+        # candidates = base_qs.filter(
+        #     center_lat__gte=lat - deg_lat,
+        #     center_lat__lte=lat + deg_lat,
+        #     center_lon__gte=lon - deg_lon,
+        #     center_lon__lte=lon + deg_lon,
+        # )
 
-    def haversine(lon1, lat1, lon2, lat2):
-        lon1, lat1, lon2, lat2 = map(math.radians, [lon1, lat1, lon2, lat2])
-        dlon = lon2 - lon1
-        dlat = lat2 - lat1
-        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-        return 2 * R * math.asin(math.sqrt(a))
+        # def haversine(lon1, lat1, lon2, lat2):
+        #     lon1, lat1, lon2, lat2 = map(math.radians, [lon1, lat1, lon2, lat2])
+        #     dlon = lon2 - lon1
+        #     dlat = lat2 - lat1
+        #     a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+        #     return 2 * R * math.asin(math.sqrt(a))
 
-    zone = []
-    for r in candidates.select_related('created_by', 'verified_by'):
-        rlat = getattr(r, 'center_lat', None)
-        rlon = getattr(r, 'center_lon', None)
-        if rlat is None or rlon is None:
-            continue
-        d = haversine(lon, lat, rlon, rlat)
-        if d <= radius_km * 1000.0:
-            zone.append(r)
+        # zone = []
+        # for r in candidates.select_related('created_by', 'verified_by'):
+        #     rlat = getattr(r, 'center_lat', None)
+        #     rlon = getattr(r, 'center_lon', None)
+        #     if rlat is None or rlon is None:
+        #         continue
+        #     d = haversine(lon, lat, rlon, rlat)
+        #     if d <= radius_km * 1000.0:
+        #         zone.append(r)
 
-    # Compute latest version in the zone
-    latest_dt = None
-    if zone:
-        latest_dt = max((z.updated_at for z in zone if getattr(z, 'updated_at', None) is not None), default=None)
+        # # Compute latest version in the zone
+        # latest_dt = None
+        # if zone:
+        #     latest_dt = max((z.updated_at for z in zone if getattr(z, 'updated_at', None) is not None), default=None)
 
-    # Apply version filter for changes
-    if since_dt is not None:
-        zone = [z for z in zone if (getattr(z, 'updated_at', None) and z.updated_at > since_dt)]
+        # # Apply version filter for changes
+        # if since_dt is not None:
+        #     zone = [z for z in zone if (getattr(z, 'updated_at', None) and z.updated_at > since_dt)]
 
-    data = RadarDeltaSerializer(zone, many=True).data
-    if latest_dt is None:
-        latest_version_str = version_param if version_param else '0'
-    else:
-        latest_version_str = latest_dt.astimezone(dt_timezone.utc).isoformat().replace('+00:00', 'Z')
+        # data = RadarDeltaSerializer(zone, many=True).data
+        # if latest_dt is None:
+        #     latest_version_str = version_param if version_param else '0'
+        # else:
+        #     latest_version_str = latest_dt.astimezone(dt_timezone.utc).isoformat().replace('+00:00', 'Z')
 
-    return Response({
-        'version': latest_version_str,
-        'count': len(data),
-        'radars': data,
-    })
+        # return Response({
+        #     'version': latest_version_str,
+        #     'count': len(data),
+        #     'radars': data,
+        # })
 
 
 @api_view(['POST'])
@@ -717,7 +735,7 @@ def otp_verify_view(request):
     refresh = RefreshToken.for_user(user)
     access = refresh.access_token
     # Compute expiries based on settings lifetimes in UTC
-    now = dt_timezone.now()
+    now = timezone.now()
     access_expires = now + settings.SIMPLE_JWT.get('ACCESS_TOKEN_LIFETIME')
     refresh_expires = now + settings.SIMPLE_JWT.get('REFRESH_TOKEN_LIFETIME')
 

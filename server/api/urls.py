@@ -18,6 +18,7 @@ urlpatterns = [
     # by the ViewSet detail route (e.g., 'radars/<pk>/').
     path('radars/impacted/', views.radars_impacted_view, name='radars-impacted'),
     path('radars/nearby/', views.radars_nearby_view, name='radars-nearby'),
+    path('radars/categories/', views.radars_categories_view, name='radars-categories'),
     # Mobile: versioned radius updates
     path('mobile/radars/updates/', views.radars_updates_view, name='mobile-radars-updates'),
     path('route/', views.route_view, name='route'),
