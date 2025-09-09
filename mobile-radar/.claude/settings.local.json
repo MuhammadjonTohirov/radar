@@ -3,7 +3,8 @@
     "allow": [
       "Bash(flutter analyze:*)",
       "Bash(flutter build:*)",
-      "Bash(flutter run:*)"
+      "Bash(flutter run:*)",
+      "Read(//Users/muhammad/Development/Personal/Radar/server/**)"
     ],
     "deny": [],
     "ask": []
