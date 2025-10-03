@@ -10,8 +10,8 @@ Mobile Radar is a Flutter application that provides real-time radar detection an
 
 ### Flutter Setup
 - **Install dependencies**: `flutter pub get`
-- **Run on Android emulator**: `flutter run -d emulator --dart-define=API_BASE_URL=http://192.168.1.124:9999/api/`
-- **Run on iOS simulator**: `flutter run -d ios --dart-define=API_BASE_URL=http://192.168.1.124:9999/api/`
+- **Run on Android emulator**: `flutter run -d emulator --dart-define=API_BASE_URL=http://94.158.51.9:9998/api/`
+- **Run on iOS simulator**: `flutter run -d ios --dart-define=API_BASE_URL=http://94.158.51.9:9998/api/`
 - **Build APK**: `flutter build apk`
 - **Build iOS**: `flutter build ios`
 

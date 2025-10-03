@@ -12,8 +12,8 @@ Run Locally
 2) Flutter setup (3.19+ recommended)
 3) From mobile-radar/, run:
    - flutter pub get
-   - Android emulator: flutter run -d emulator --dart-define=API_BASE_URL=http://192.168.1.124:9999/api/
-   - iOS simulator: flutter run -d ios --dart-define=API_BASE_URL=http://192.168.1.124:9999/api/
+   - Android emulator: flutter run -d emulator --dart-define=API_BASE_URL=http://94.158.51.9:9998/api/
+   - iOS simulator: flutter run -d ios --dart-define=API_BASE_URL=http://94.158.51.9:9998/api/
 
 Env
 - API base URL is passed via --dart-define API_BASE_URL and defaults to http://10.0.2.2:8000/api/ for Android emulator.

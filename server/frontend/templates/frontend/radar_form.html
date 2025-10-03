@@ -45,6 +45,11 @@
             </p>
             
             <div id="map" class="map-container"></div>
+            {% if settings.RADAR_ENHANCED_DRAWING %}
+            <div id="shape-hints" style="margin-top:8px; color:#555; font-size: 12px;">
+                Tips: Place the 📡 pin, then use Circle or Sector for quick coverage. If tools fail to load, manual polygon still works.
+            </div>
+            {% endif %}
             
             <div class="polygon-info" id="polygon-info" style="display: none;">
                 <h4>Detection Area Info:</h4>
@@ -121,6 +126,9 @@
 const radarData = {
     hasGIS: {% if settings.HAS_GIS %}true{% else %}false{% endif %},
     isEditing: {% if radar %}true{% else %}false{% endif %},
+    enhancedDrawing: {% if settings.RADAR_ENHANCED_DRAWING %}true{% else %}false{% endif %},
+    defaultRadiusM: {{ settings.RADAR_DEFAULT_RADIUS_M|default:75 }},
+    sectorBaseWidthM: {{ settings.RADAR_SECTOR_BASE_WIDTH_M|default:20 }},
     {% if not settings.HAS_GIS %}
     sectorJsonId: '{{ form.sector_json.id_for_label }}',
     centerLatId: '{{ form.center_lat.id_for_label }}',
@@ -133,6 +141,10 @@ const radarData = {
     {% endif %}
 };
 </script>
+{% if settings.RADAR_ENHANCED_DRAWING %}
+<!-- Optional Turf.js for robust geometry ops; tools gracefully fallback if unavailable -->
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js" defer></script>
+{% endif %}
 
-<script src="{% static 'frontend/js/radar_form.js' %}"></script>
+<script src="{% static 'frontend/js/radar_form.js' %}?v={{ settings.RADAR_FRONTEND_ASSET_VERSION }}"></script>
 {% endblock %}

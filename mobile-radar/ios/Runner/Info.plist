@@ -35,10 +35,10 @@
 	</dict>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string>Need to open documents folder</string>
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>This app uses your location to show your position on the map and center the view.</string>
-    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>Location is used to center the map and for navigation features.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Location is used to center the map and for navigation features.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app uses your location to show your position on the map and center the view.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

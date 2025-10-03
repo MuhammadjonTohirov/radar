@@ -6,6 +6,26 @@ let radarMarker = null;
 // Location search functionality with dropdown
 let searchResultsDiv = null;
 let searchMarker = null;
+// Enhanced controls
+let circleControl = null;
+let sectorControl = null;
+let sectorModeActive = false;
+let sectorDragActive = false;
+let sectorDragStart = null; // [lon, lat]
+let pinControl = null;
+let polygonControl = null;
+let trashControl = null;
+let pinModeActive = false;
+let polygonModeActive = false;
+let sectorPreview = {
+    lineSource: 'sector-preview-line',
+    rectSource: 'sector-preview-rect',
+    arrowSource: 'sector-preview-arrow',
+    lineLayer: 'sector-preview-line-layer',
+    rectFillLayer: 'sector-preview-rect-fill-layer',
+    rectLineLayer: 'sector-preview-rect-line-layer',
+    arrowFillLayer: 'sector-preview-arrow-fill-layer'
+};
 
 // Helper: parse a coordinate string accepting "lat,lon" or "lon,lat"
 function parseCoordString(v) {
@@ -85,22 +105,22 @@ function initMap() {
             console.error('Map error event:', err);
         });
 
-        // Control state variables
-        let pinModeActive = false;
-        let polygonModeActive = false;
+        // Control state variables already declared globally; reset here
+        pinModeActive = false;
+        polygonModeActive = false;
 
         // Add radar location pin control
-        const pinControl = document.createElement('div');
+        pinControl = document.createElement('div');
         pinControl.className = 'radar-pin-control';
         pinControl.title = 'Click to place radar location';
 
         // Add polygon drawing control
-        const polygonControl = document.createElement('div');
+        polygonControl = document.createElement('div');
         polygonControl.className = 'radar-polygon-control';
         polygonControl.title = 'Click to draw detection area';
 
         // Add trash/clear control
-        const trashControl = document.createElement('div');
+        trashControl = document.createElement('div');
         trashControl.className = 'radar-trash-control';
         trashControl.title = 'Clear all drawings';
 
@@ -132,6 +152,9 @@ function initMap() {
                 draw.changeMode('draw_polygon');
                 polygonControl.title = 'Drawing polygon - left-click to add points, double-click last point to finish, Esc or click button to cancel';
                 console.log('Polygon drawing mode activated');
+                // Prevent panning while drawing to avoid collisions with drag
+                try { map.dragPan.disable(); } catch(_){}
+                try { map.getCanvas().style.cursor = 'crosshair'; } catch(_){}
             } else {
                 // Exit drawing mode safely
                 try {
@@ -144,6 +167,9 @@ function initMap() {
                 }
                 polygonControl.title = 'Click to draw detection area';
                 console.log('Polygon drawing mode deactivated');
+                // Re-enable panning when exiting polygon mode
+                try { map.dragPan.enable(); } catch(_){}
+                try { map.getCanvas().style.cursor = ''; } catch(_){}
             }
         });
 
@@ -177,11 +203,36 @@ function initMap() {
             }
         });
 
+        // Optional enhanced tools: circle and sector (behind feature flag)
+        if (typeof radarData !== 'undefined' && radarData.enhancedDrawing) {
+            circleControl = document.createElement('div');
+            circleControl.className = 'radar-circle-control';
+            circleControl.title = 'Create circle coverage from pin';
+
+            sectorControl = document.createElement('div');
+            sectorControl.className = 'radar-sector-control';
+            sectorControl.title = 'Click and drag to set sector direction';
+
+            circleControl.addEventListener('click', onCreateCircleFromPin);
+            // Toggle sector drag drawing mode
+            sectorControl.addEventListener('click', () => {
+                sectorModeActive = !sectorModeActive;
+                sectorControl.classList.toggle('active', sectorModeActive);
+                if (sectorModeActive) {
+                    enterSectorDragMode();
+                } else {
+                    exitSectorDragMode();
+                }
+            });
+        }
+
         // Add controls to map container
         const mapContainer = document.getElementById('map');
         if (mapContainer) {
             mapContainer.appendChild(pinControl);
             mapContainer.appendChild(polygonControl);
+            if (circleControl) mapContainer.appendChild(circleControl);
+            if (sectorControl) mapContainer.appendChild(sectorControl);
             mapContainer.appendChild(trashControl);
         }
 
@@ -210,6 +261,14 @@ function initMap() {
                 }
                 
                 console.log('Polygon drawing cancelled with Escape key');
+                // Re-enable panning on cancel
+                try { map.dragPan.enable(); } catch(_){}
+                try { map.getCanvas().style.cursor = ''; } catch(_){}
+            }
+            if (e.key === 'Escape' && sectorDragActive) {
+                // Cancel sector drag
+                exitSectorDragMode();
+                console.log('Sector drag cancelled with Escape key');
             }
         });
 
@@ -273,11 +332,29 @@ function initMap() {
 
         // Handle drawing events
         map.on('draw.create', (e) => {
-            updatePolygon();
-            // Exit polygon drawing mode after creating a polygon - don't call changeMode to avoid recursion
-            polygonModeActive = false;
-            polygonControl.classList.remove('active');
-            polygonControl.title = 'Click to draw detection area';
+            try {
+                const feature = e && e.features && e.features[0];
+                if (!feature || !feature.geometry) { updatePolygon(); return; }
+                const geomType = feature.geometry.type;
+
+                // Handle polygon finalize
+                if (geomType === 'Polygon') {
+                    updatePolygon();
+                    polygonModeActive = false;
+                    polygonControl.classList.remove('active');
+                    polygonControl.title = 'Click to draw detection area';
+                    // Re-enable panning after finishing polygon
+                    try { map.dragPan.enable(); } catch(_){}
+                    try { map.getCanvas().style.cursor = ''; } catch(_){}
+                    return;
+                }
+
+                // Default behavior
+                updatePolygon();
+            } catch (err) {
+                console.warn('draw.create handler error', err);
+                updatePolygon();
+            }
         });
         map.on('draw.delete', clearPolygon);
         map.on('draw.update', updatePolygon);
@@ -406,6 +483,373 @@ function loadExistingRadarLocation() {
                     .addTo(map);
             }
         }
+    }
+}
+
+// ------------------------------------------------------------
+// Enhanced tools (circle/sector) with graceful fallback
+// ------------------------------------------------------------
+
+function getRadarCenterFromFormOrMarker() {
+    // Prefer marker position if available
+    if (radarMarker && typeof radarMarker.getLngLat === 'function') {
+        const c = radarMarker.getLngLat();
+        return [c.lng, c.lat];
+    }
+    // Fallback to hidden fields (non-GIS mode)
+    if (!radarData.hasGIS) {
+        try {
+            const lat = parseFloat(document.getElementById(radarData.centerLatId).value);
+            const lon = parseFloat(document.getElementById(radarData.centerLonId).value);
+            if (!Number.isNaN(lat) && !Number.isNaN(lon)) return [lon, lat];
+        } catch (_) {}
+    }
+    return null;
+}
+
+function metersToDegrees(lat, meters) {
+    const degLat = meters / 111320;
+    const degLon = meters / (111320 * Math.max(0.000001, Math.cos(lat * Math.PI / 180)));
+    return [degLon, degLat];
+}
+
+function makeCircleGeometryApprox(center, radiusM, steps = 64) {
+    const [lon, lat] = center;
+    const [dLon, dLat] = metersToDegrees(lat, radiusM);
+    const coords = [];
+    for (let i = 0; i < steps; i++) {
+        const theta = (i / steps) * 2 * Math.PI;
+        const x = lon + dLon * Math.cos(theta);
+        const y = lat + dLat * Math.sin(theta);
+        coords.push([x, y]);
+    }
+    coords.push(coords[0]);
+    return { type: 'Polygon', coordinates: [coords] };
+}
+
+function projectFrom(centerLonLat, distanceM, bearingDeg) {
+    const [lon, lat] = centerLonLat;
+    const mPerDegLat = 111320.0;
+    const mPerDegLon = 111320.0 * Math.max(0.000001, Math.cos(lat * Math.PI / 180));
+    const rad = bearingDeg * Math.PI / 180;
+    const dx = Math.sin(rad) * distanceM; // east component
+    const dy = Math.cos(rad) * distanceM; // north component
+    const dLon = dx / mPerDegLon;
+    const dLat = dy / mPerDegLat;
+    return [lon + dLon, lat + dLat];
+}
+
+function makeTrapezoidSector(centerLonLat, radiusM, bearingDeg) {
+    const [lon, lat] = centerLonLat;
+    if (!Number.isFinite(radiusM) || radiusM <= 0) {
+        radiusM = 1;
+    }
+    const rad = bearingDeg * Math.PI / 180;
+    const mPerDegLatCenter = 111320.0;
+    const mPerDegLonCenter = 111320.0 * Math.max(0.000001, Math.cos(lat * Math.PI / 180));
+
+    const outerCenter = projectFrom(centerLonLat, radiusM, bearingDeg);
+    const mPerDegLonOuter = 111320.0 * Math.max(0.000001, Math.cos(outerCenter[1] * Math.PI / 180));
+
+    const dirPerpEast = Math.cos(rad);      // east component for perpendicular vector
+    const dirPerpNorth = -Math.sin(rad);    // north component for perpendicular vector
+
+    const baseWidthRaw = (typeof radarData !== 'undefined' && radarData && radarData.sectorBaseWidthM !== undefined)
+        ? Number(radarData.sectorBaseWidthM)
+        : 20;
+    const baseWidth = Math.max(baseWidthRaw || 20, 1);
+    const innerHalfWidthM = baseWidth / 2;
+    const outerHalfWidthM = innerHalfWidthM * 1.1; // 10% wider at the far end
+
+    const innerLonOffset = (dirPerpEast * innerHalfWidthM) / mPerDegLonCenter;
+    const innerLatOffset = (dirPerpNorth * innerHalfWidthM) / mPerDegLatCenter;
+    const outerLonOffset = (dirPerpEast * outerHalfWidthM) / mPerDegLonOuter;
+    const outerLatOffset = (dirPerpNorth * outerHalfWidthM) / mPerDegLatCenter;
+
+    const innerRight = [lon + innerLonOffset, lat + innerLatOffset];
+    const innerLeft = [lon - innerLonOffset, lat - innerLatOffset];
+    const outerRight = [outerCenter[0] + outerLonOffset, outerCenter[1] + outerLatOffset];
+    const outerLeft = [outerCenter[0] - outerLonOffset, outerCenter[1] - outerLatOffset];
+
+    return {
+        type: 'Polygon',
+        coordinates: [[innerRight, outerRight, outerLeft, innerLeft, innerRight]]
+    };
+}
+
+function makeArrowTriangle(startLonLat, endLonLat, lengthM = 12, widthM = 8) {
+    // Returns a small triangle polygon at the end, pointing from start->end
+    const [lon1, lat1] = startLonLat;
+    const [lon2, lat2] = endLonLat;
+    const midLat = (lat1 + lat2) / 2;
+    const mPerDegLat = 111320.0;
+    const mPerDegLon = 111320.0 * Math.max(0.000001, Math.cos(midLat * Math.PI / 180));
+    // Direction vector in meters (from start to end)
+    const vx = (lon2 - lon1) * mPerDegLon;
+    const vy = (lat2 - lat1) * mPerDegLat;
+    const len = Math.hypot(vx, vy);
+    if (!isFinite(len) || len === 0) return null;
+    const ux = vx / len;
+    const uy = vy / len;
+    const halfW = widthM / 2;
+    // Base center behind the tip by lengthM
+    const bx = (lon2 - (lengthM * ux) / mPerDegLon);
+    const by = (lat2 - (lengthM * uy) / mPerDegLat);
+    // Perpendicular unit
+    const px = -uy;
+    const py = ux;
+    const left = [bx + (halfW * px) / mPerDegLon, by + (halfW * py) / mPerDegLat];
+    const right = [bx - (halfW * px) / mPerDegLon, by - (halfW * py) / mPerDegLat];
+    const tip = [lon2, lat2];
+    return { type: 'Polygon', coordinates: [[tip, left, right, tip]] };
+}
+
+function ensureSectorPreviewLayers() {
+    // Create sources/layers if missing
+    try {
+        if (!map.getSource(sectorPreview.lineSource)) {
+            map.addSource(sectorPreview.lineSource, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+            map.addLayer({
+                id: sectorPreview.lineLayer,
+                type: 'line',
+                source: sectorPreview.lineSource,
+                paint: { 'line-color': '#1d6fb8', 'line-width': 2, 'line-dasharray': [2, 2] }
+            });
+        }
+        if (!map.getSource(sectorPreview.rectSource)) {
+            map.addSource(sectorPreview.rectSource, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+            map.addLayer({
+                id: sectorPreview.rectFillLayer,
+                type: 'fill',
+                source: sectorPreview.rectSource,
+                paint: { 'fill-color': '#1d6fb8', 'fill-opacity': 0.15 }
+            });
+            map.addLayer({
+                id: sectorPreview.rectLineLayer,
+                type: 'line',
+                source: sectorPreview.rectSource,
+                paint: { 'line-color': '#1d6fb8', 'line-width': 2 }
+            });
+        }
+        if (!map.getSource(sectorPreview.arrowSource)) {
+            map.addSource(sectorPreview.arrowSource, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+            map.addLayer({
+                id: sectorPreview.arrowFillLayer,
+                type: 'fill',
+                source: sectorPreview.arrowSource,
+                paint: { 'fill-color': '#1d6fb8', 'fill-opacity': 0.6 }
+            });
+        }
+    } catch (err) { console.warn('ensureSectorPreviewLayers error', err); }
+}
+
+function updateSectorPreview(start, current) {
+    if (!start || !current) return;
+    // Trapezoid preview: center=start, direction to current defines bearing and radius
+    const center = start;
+    const end = current;
+    const midLat = center[1];
+    const mPerDegLat = 111320.0;
+    const mPerDegLon = 111320.0 * Math.max(0.000001, Math.cos(midLat * Math.PI / 180));
+    const vx = (end[0] - center[0]) * mPerDegLon;
+    const vy = (end[1] - center[1]) * mPerDegLat;
+    let radiusM = Math.hypot(vx, vy);
+    // Minimal radius for visibility
+    if (!isFinite(radiusM) || radiusM < 1) radiusM = 1;
+    const bearingRad = Math.atan2(vx, vy); // from north, clockwise
+    const bearingDeg = (bearingRad * 180 / Math.PI + 360) % 360;
+
+    const line = { type: 'Feature', geometry: { type: 'LineString', coordinates: [center, end] }, properties: {} };
+    const trapezoid = makeTrapezoidSector(center, radiusM, bearingDeg);
+    const trapezoidFeature = { type: 'Feature', geometry: trapezoid, properties: {} };
+    const tip = projectFrom(center, radiusM, bearingDeg);
+    const arrowGeom = makeArrowTriangle(center, tip, 12, 8);
+    const arrowFeatures = arrowGeom ? [{ type: 'Feature', geometry: arrowGeom, properties: {} }] : [];
+    try {
+        map.getSource(sectorPreview.lineSource).setData({ type: 'FeatureCollection', features: [line] });
+        map.getSource(sectorPreview.rectSource).setData({ type: 'FeatureCollection', features: [trapezoidFeature] });
+        map.getSource(sectorPreview.arrowSource).setData({ type: 'FeatureCollection', features: arrowFeatures });
+    } catch (err) { /* ignore while layers are initializing */ }
+}
+
+function clearSectorPreview() {
+    try {
+        if (map.getSource(sectorPreview.lineSource)) map.getSource(sectorPreview.lineSource).setData({ type: 'FeatureCollection', features: [] });
+        if (map.getSource(sectorPreview.rectSource)) map.getSource(sectorPreview.rectSource).setData({ type: 'FeatureCollection', features: [] });
+        if (map.getSource(sectorPreview.arrowSource)) map.getSource(sectorPreview.arrowSource).setData({ type: 'FeatureCollection', features: [] });
+    } catch (_) {}
+}
+
+function enterSectorDragMode() {
+    // Deactivate polygon and pin modes
+    polygonModeActive = false;
+    pinModeActive = false;
+    polygonControl && polygonControl.classList.remove('active');
+    pinControl && pinControl.classList.remove('active');
+    polygonControl && (polygonControl.title = 'Click to draw detection area');
+    pinControl && (pinControl.title = 'Click to place radar location');
+    try { draw.changeMode('simple_select'); } catch(_){}
+
+    // Prepare preview layers and listeners
+    ensureSectorPreviewLayers();
+    sectorDragActive = false;
+    sectorDragStart = null;
+    try { map.dragPan.disable(); } catch(_){}
+    try { map.getCanvas().style.cursor = 'crosshair'; } catch(_){}
+
+    const onMouseDown = (e) => {
+        sectorDragActive = true;
+        sectorDragStart = [e.lngLat.lng, e.lngLat.lat];
+        updateSectorPreview(sectorDragStart, sectorDragStart);
+    };
+    const onMouseMove = (e) => {
+        if (!sectorDragActive || !sectorDragStart) return;
+        updateSectorPreview(sectorDragStart, [e.lngLat.lng, e.lngLat.lat]);
+    };
+    const onFinalize = (e) => {
+        if (!sectorDragActive || !sectorDragStart) return;
+        let lngLat = e && e.lngLat;
+        if (!lngLat && e && typeof e.clientX === 'number' && typeof e.clientY === 'number') {
+            try {
+                const rect = map.getCanvas().getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                if (x >= 0 && y >= 0 && x <= rect.width && y <= rect.height) {
+                    const point = map.unproject([x, y]);
+                    if (point) lngLat = point;
+                }
+            } catch (_) {}
+        }
+        if (!lngLat) {
+            exitSectorDragMode();
+            return;
+        }
+        const end = [lngLat.lng, lngLat.lat];
+        // Final sector trapezoid: center = start, radius = |start-end|, bearing = start->end
+        const midLat = sectorDragStart[1];
+        const mPerDegLat = 111320.0;
+        const mPerDegLon = 111320.0 * Math.max(0.000001, Math.cos(midLat * Math.PI / 180));
+        const vx = (end[0] - sectorDragStart[0]) * mPerDegLon;
+        const vy = (end[1] - sectorDragStart[1]) * mPerDegLat;
+        let radiusM = Math.hypot(vx, vy);
+        if (!isFinite(radiusM) || radiusM < 1) radiusM = Number(radarData.defaultRadiusM || 75);
+        const bearingDeg = ((Math.atan2(vx, vy) * 180 / Math.PI) + 360) % 360;
+        let trapezoid = makeTrapezoidSector(sectorDragStart, radiusM, bearingDeg);
+        trapezoid = simplifyIfPossible(trapezoid, 1);
+        updateSectorJsonWithGeometry(trapezoid);
+        addPolygonToDraw(trapezoid);
+        exitSectorDragMode();
+    };
+
+    // Store handlers to remove later
+    sectorPreview._onMouseDown = onMouseDown;
+    sectorPreview._onMouseMove = onMouseMove;
+    sectorPreview._onMouseUp = onFinalize;
+    sectorPreview._onMouseLeave = (e) => { if (sectorDragActive) onFinalize(e); };
+
+    map.on('mousedown', onMouseDown);
+    map.on('mousemove', onMouseMove);
+    map.on('mouseup', onFinalize);
+    map.on('mouseleave', sectorPreview._onMouseLeave);
+    // Also capture mouseup outside the map canvas
+    sectorPreview._onDocMouseUp = onFinalize;
+    document.addEventListener('mouseup', sectorPreview._onDocMouseUp);
+}
+
+function exitSectorDragMode() {
+    try { map.dragPan.enable(); } catch(_){}
+    try { map.getCanvas().style.cursor = ''; } catch(_){}
+    sectorDragActive = false;
+    sectorDragStart = null;
+    clearSectorPreview();
+    sectorModeActive = false;
+    sectorControl && sectorControl.classList.remove('active');
+    sectorControl && (sectorControl.title = 'Click and drag to set sector direction');
+    try { map.off('mousedown', sectorPreview._onMouseDown); } catch(_){}
+    try { map.off('mousemove', sectorPreview._onMouseMove); } catch(_){}
+    try { map.off('mouseup', sectorPreview._onMouseUp); } catch(_){}
+    try { map.off('mouseleave', sectorPreview._onMouseLeave); } catch(_){}
+    try { document.removeEventListener('mouseup', sectorPreview._onDocMouseUp); } catch(_){}
+}
+
+function simplifyIfPossible(geometry, toleranceMeters = 5) {
+    try {
+        if (typeof turf !== 'undefined' && turf && typeof turf.simplify === 'function') {
+            const centerLat = getRadarCenterFromFormOrMarker()?.[1] || 0;
+            const degTol = metersToDegrees(centerLat, toleranceMeters)[1];
+            const simplified = turf.simplify({ type: 'Feature', geometry }, { tolerance: degTol, highQuality: true });
+            return simplified.geometry;
+        }
+    } catch (e) {
+        console.warn('Simplify failed, using original geometry', e);
+    }
+    return geometry;
+}
+
+function updateSectorJsonWithGeometry(geometry) {
+    if (!radarData.hasGIS) {
+        const el = document.getElementById(radarData.sectorJsonId);
+        if (el) el.value = JSON.stringify(geometry);
+    }
+}
+
+function addPolygonToDraw(geometry) {
+    try {
+        draw.deleteAll();
+        const feature = { type: 'Feature', geometry, properties: {} };
+        draw.add(feature);
+        currentPolygon = feature;
+        updatePolygon();
+    } catch (e) {
+        console.warn('Failed to add polygon to draw. Falling back.', e);
+    }
+}
+
+function onCreateCircleFromPin() {
+    try {
+        const center = getRadarCenterFromFormOrMarker();
+        if (!center) {
+            alert('Place the radar pin first to set center.');
+            return;
+        }
+        let radius = parseFloat(prompt('Circle radius in meters:', String(radarData.defaultRadiusM || 75)));
+        if (!Number.isFinite(radius) || radius <= 0) return;
+        let geom;
+        if (typeof turf !== 'undefined' && turf && typeof turf.circle === 'function') {
+            const circle = turf.circle(center, radius, { steps: 64, units: 'meters' });
+            geom = circle.geometry;
+        } else {
+            geom = makeCircleGeometryApprox(center, radius, 64);
+        }
+        geom = simplifyIfPossible(geom, 5);
+        updateSectorJsonWithGeometry(geom);
+        addPolygonToDraw(geom);
+    } catch (e) {
+        console.error('Circle tool unavailable, falling back to manual polygon.', e);
+        alert('Circle tool unavailable. Use manual polygon.');
+    }
+}
+
+function onCreateSectorFromPin() {
+    try {
+        const center = getRadarCenterFromFormOrMarker();
+        if (!center) {
+            alert('Place the radar pin first to set center.');
+            return;
+        }
+        const defRadius = radarData.defaultRadiusM || 75;
+        const radius = parseFloat(prompt('Sector radius in meters:', String(defRadius)));
+        if (!Number.isFinite(radius) || radius <= 0) return;
+        const bearing = parseFloat(prompt('Sector direction (degrees, 0=N, 90=E):', '0'));
+        if (!Number.isFinite(bearing)) return;
+
+        let geom = makeTrapezoidSector(center, radius, bearing);
+        geom = simplifyIfPossible(geom, 5);
+        updateSectorJsonWithGeometry(geom);
+        addPolygonToDraw(geom);
+    } catch (e) {
+        console.error('Sector tool unavailable, falling back to manual polygon.', e);
+        alert('Sector tool unavailable. Use manual polygon.');
     }
 }
 function createSearchResultsDiv() {

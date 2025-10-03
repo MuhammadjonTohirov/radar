@@ -4,7 +4,11 @@
       "Bash(flutter analyze:*)",
       "Bash(flutter build:*)",
       "Bash(flutter run:*)",
-      "Read(//Users/muhammad/Development/Personal/Radar/server/**)"
+      "Read(//Users/muhammad/Development/Personal/Radar/server/**)",
+      "Bash(tree:*)",
+      "Bash(find:*)",
+      "Bash(mkdir:*)",
+      "Read(//Users/muhammad/.pub-cache/hosted/pub.dev/maplibre_gl-0.22.0/lib/src/**)"
     ],
     "deny": [],
     "ask": []

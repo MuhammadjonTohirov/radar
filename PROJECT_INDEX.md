@@ -273,7 +273,7 @@ python app.py  # Runs on port 5002
 
 # 3. Run Flutter mobile app
 cd mobile-radar/
-flutter run -d emulator --dart-define=API_BASE_URL=http://192.168.1.124:9999/api/
+flutter run -d emulator --dart-define=API_BASE_URL=http://94.158.51.9:9998/api/
 
 # 4. Docker environment (all services)
 docker compose up -d
@@ -290,7 +290,7 @@ flutter format .
 # Platform-specific builds
 flutter build apk                 # Android APK
 flutter build ios                 # iOS archive
-flutter run -d ios --dart-define=API_BASE_URL=http://192.168.1.124:9999/api/
+flutter run -d ios --dart-define=API_BASE_URL=http://94.158.51.9:9998/api/
 
 # Testing
 flutter test
@@ -384,7 +384,7 @@ DEBUG=True
 CUSTOM_ROUTING_URL=http://localhost:5002
 
 # Flutter Mobile
-API_BASE_URL=http://192.168.1.124:9999/api/
+API_BASE_URL=http://94.158.51.9:9998/api/
 
 # Docker
 OSRM_REGION=uzbekistan

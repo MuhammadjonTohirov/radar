@@ -183,6 +183,19 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Feature flags for frontend drawing tools (safe fallback)
+# Toggle enhanced map tools (circle/sector generation, simplification)
+RADAR_ENHANCED_DRAWING = config('RADAR_ENHANCED_DRAWING', default=True, cast=bool)
+# Default circle radius when auto-generating a coverage polygon (meters)
+RADAR_DEFAULT_RADIUS_M = config('RADAR_DEFAULT_RADIUS_M', default=75, cast=int)
+# Base width (meters) for trapezoid sector tool (bottom side)
+RADAR_SECTOR_BASE_WIDTH_M = config('RADAR_SECTOR_BASE_WIDTH_M', default=20, cast=int)
+# Allow server-side default circle if no polygon provided (non-GIS mode only)
+# Disabled by default to preserve current behavior
+RADAR_ALLOW_DEFAULT_CIRCLE = config('RADAR_ALLOW_DEFAULT_CIRCLE', default=True, cast=bool)
+# Optional cache-busting token for frontend static assets
+RADAR_FRONTEND_ASSET_VERSION = config('RADAR_FRONTEND_ASSET_VERSION', default='20240916b')
+
 # REST Framework configuration
 REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',

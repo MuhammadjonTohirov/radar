@@ -2,6 +2,7 @@ from django import forms
 from django.conf import settings
 from radars.models import Radar, RadarCategory
 import json
+import math
 
 
 class RadarForm(forms.ModelForm):
@@ -81,7 +82,30 @@ class RadarForm(forms.ModelForm):
             center_lon = cleaned_data.get('center_lon')
             
             if not sector_json:
-                raise forms.ValidationError('Please draw a detection area polygon on the map.')
+                # Optional server-side fallback: generate default circle polygon around pin
+                if getattr(settings, 'RADAR_ALLOW_DEFAULT_CIRCLE', False) and center_lat is not None and center_lon is not None:
+                    try:
+                        radius_m = int(getattr(settings, 'RADAR_DEFAULT_RADIUS_M', 75))
+                        # approximate meters->degrees conversion at given latitude
+                        deg_lat = radius_m / 111320.0
+                        cos_lat = math.cos((center_lat or 0) * math.pi / 180.0) or 1e-6
+                        deg_lon = radius_m / (111320.0 * cos_lat)
+                        steps = 64
+                        ring = []
+                        for i in range(steps):
+                            theta = (i / steps) * 2.0 * math.pi
+                            x = center_lon + deg_lon * math.cos(theta)
+                            y = center_lat + deg_lat * math.sin(theta)
+                            ring.append([x, y])
+                        if ring:
+                            ring.append(ring[0])
+                        geom = {"type": "Polygon", "coordinates": [ring]}
+                        cleaned_data['sector_json'] = json.dumps(geom)
+                    except Exception:
+                        # If fallback fails, keep original validation behavior
+                        raise forms.ValidationError('Please draw a detection area polygon on the map.')
+                else:
+                    raise forms.ValidationError('Please draw a detection area polygon on the map.')
             
             if center_lat is None or center_lon is None:
                 raise forms.ValidationError('Center coordinates are required.')
