@@ -1,3 +1,4 @@
+import json
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -271,6 +272,19 @@ def route_view(request):
 
     feature = RoutingService.get_route_coords(coordinates, profile=profile)
     return Response(feature)
+
+def map_style(request):
+    # get map_style.json from /api/utils/map_style.json
+    import os
+    from django.http import JsonResponse, HttpResponseNotFound
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(base_dir, 'utils', 'map_style.json')
+        with open(file_path, 'r') as f:
+            data = f.read()
+            return JsonResponse(json.loads(data))
+    except Exception:
+        return HttpResponseNotFound('map_style.json not found')
 
 
 @api_view(['GET'])

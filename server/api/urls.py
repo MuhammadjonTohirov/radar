@@ -32,4 +32,7 @@ urlpatterns = [
     path('auth/otp/request/', views.otp_request_view, name='otp-request'),
     path('auth/otp/verify/', views.otp_verify_view, name='otp-verify'),
     path('', include(router.urls)),
+    
+    # Map
+    path('map/style/', views.map_style, name='map_style'),
 ]
