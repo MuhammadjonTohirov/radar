@@ -9,7 +9,7 @@ PODS:
     - Flutter
     - FlutterMacOS
   - MapLibre (6.19.1)
-  - maplibre_gl (0.23.0):
+  - maplibre_gl (0.24.0):
     - Flutter
     - MapLibre (= 6.19.1)
   - package_info_plus (0.4.5):
@@ -70,7 +70,7 @@ SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   geolocator_apple: ab36aa0e8b7d7a2d7639b3b4e48308394e8cef5e
   MapLibre: 7f24faba45439f80ccb0f83393c29fa32cb81952
-  maplibre_gl: 570d19eca225a1c3c73a11a3802d68c30ac798c2
+  maplibre_gl: 70a8a032d8290d1c09084c2377c0c586fd50393a
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
   path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
   shared_preferences_foundation: 9e1978ff2562383bd5676f64ec4e9aa8fa06a6f7
